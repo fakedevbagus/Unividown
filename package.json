@@ -1,0 +1,17 @@
+{
+  "name": "unividown",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "pnpm --filter @unividown/web dev",
+    "build": "pnpm --filter @unividown/web build",
+    "start": "pnpm --filter @unividown/web start",
+    "worker:dev": "cd services/worker && .venv/bin/uvicorn app.main:app --reload --port 8000",
+    "lint": "pnpm --filter @unividown/web lint",
+    "docker:dev": "docker compose -f docker-compose.dev.yml up",
+    "docker:build": "docker compose build",
+    "docker:up": "docker compose up -d",
+    "docker:down": "docker compose down",
+    "docker:logs": "docker compose logs -f"
+  }
+}
