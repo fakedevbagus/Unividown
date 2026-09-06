@@ -27,6 +27,8 @@ data/*
 !data/uploads/.gitkeep
 !data/downloads/.gitkeep
 !data/processed/.gitkeep
+*.db
+services/worker/data/
 
 # OS / IDE
 .DS_Store
@@ -41,3 +43,4 @@ data/*
 !.vscode/tasks.json
 !.vscode/launch.json
 !.vscode/extensions.json
+

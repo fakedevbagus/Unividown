@@ -23,6 +23,10 @@ engine = create_engine(
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
+def init_db():
+    from app.models import DownloadJob, DownloadedFile, ProcessingJob, Setting
+    Base.metadata.create_all(bind=engine)
+
 
 
 def get_db():
