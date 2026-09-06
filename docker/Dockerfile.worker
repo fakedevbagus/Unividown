@@ -1,0 +1,26 @@
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# Install system dependencies (FFmpeg)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ffmpeg \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Python dependencies
+COPY services/worker/requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy application source
+COPY services/worker /app
+
+ENV PYTHONUNBUFFERED=1
+ENV DATABASE_URL="sqlite:////app/data/unividown.db"
+ENV UPLOAD_DIR="/app/data/uploads"
+ENV DOWNLOAD_DIR="/app/data/downloads"
+ENV PROCESSED_DIR="/app/data/processed"
+
+EXPOSE 8000
+
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]

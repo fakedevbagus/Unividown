@@ -1,0 +1,36 @@
+version: '3.8'
+
+services:
+  web:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.web
+    command: pnpm --filter @unividown/web dev
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=development
+      - WORKER_URL=http://worker:8000
+    volumes:
+      - ./apps/web:/app/apps/web
+      - ./packages/shared:/app/packages/shared
+      - /app/apps/web/node_modules
+    depends_on:
+      - worker
+
+  worker:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.worker
+    command: uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+    ports:
+      - "8000:8000"
+    environment:
+      - PYTHON_ENV=development
+      - DATABASE_URL=sqlite:////app/data/unividown.db
+      - UPLOAD_DIR=/app/data/uploads
+      - DOWNLOAD_DIR=/app/data/downloads
+      - PROCESSED_DIR=/app/data/processed
+    volumes:
+      - ./services/worker:/app
+      - ./data:/app/data
