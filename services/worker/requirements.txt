@@ -41,3 +41,4 @@ yt-dlp==2026.8.19
 redis==5.0.1
 rq==1.16.1
 openai-whisper==20231117
+prometheus-client==0.21.1

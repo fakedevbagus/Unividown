@@ -155,6 +155,13 @@ def get_system_status():
     }
 
 
+# Prometheus metrics endpoint
+@app.get("/metrics")
+def prometheus_metrics():
+    """Prometheus metrics endpoint"""
+    return Response(content=get_metrics(), media_type=get_content_type())
+
+
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
     request_id = request_id_var.get()
