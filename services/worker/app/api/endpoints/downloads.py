@@ -1,6 +1,6 @@
 from typing import Optional, List
 from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import BaseModel
+from pydantic import BaseModel, HttpUrl
 from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models.download_job import DownloadJob
@@ -15,6 +15,11 @@ class CreateDownloadRequest(BaseModel):
     url: str
     quality: Optional[str] = "best"
     priority: Optional[int] = 0
+
+
+class BatchDownloadRequest(BaseModel):
+    urls: List[str]
+    quality: Optional[str] = "best"
 
 
 class URLInfoRequest(BaseModel):
@@ -40,6 +45,40 @@ def create_download(
     db.commit()
     db.refresh(job)
     return {"job_id": job.id, "status": "queued", "job": job.to_dict()}
+
+
+@router.post("/batch")
+def create_batch_download(
+    payload: BatchDownloadRequest,
+    db: Session = Depends(get_db),
+):
+    if not payload.urls:
+        raise HTTPException(status_code=400, detail="URLs required, max 50")
+    if len(payload.urls) > 50:
+        raise HTTPException(status_code=400, detail="Max 50 URLs per batch")
+
+    jobs = []
+    for raw_url in payload.urls:
+        cleaned = str(raw_url).strip()
+        if not cleaned:
+            continue
+        job = DownloadJob(
+            url=cleaned,
+            quality=payload.quality or "best",
+            status="pending",
+            progress=0.0,
+        )
+        db.add(job)
+        jobs.append(job)
+
+    db.commit()
+    for job in jobs:
+        db.refresh(job)
+
+    return {
+        "message": f"Created {len(jobs)} download jobs",
+        "job_ids": [j.id for j in jobs],
+    }
 
 
 @router.get("")
@@ -101,11 +140,42 @@ def retry_download(job_id: int, db: Session = Depends(get_db)):
     return {"success": True, "message": "Job queued for retry", "job": job.to_dict()}
 
 
+def _resolve_info_url(url: Optional[str], payload: Optional[URLInfoRequest]):
+    if url:
+        return url
+    if payload and payload.url:
+        return payload.url
+    raise HTTPException(status_code=400, detail="URL is required")
+
+
 @router.post("/info")
-def extract_url_info(payload: URLInfoRequest):
+def extract_url_info_post(payload: URLInfoRequest):
+    target_url = _resolve_info_url(None, payload)
     try:
-        info = downloader_service.get_info(payload.url)
+        info = downloader_service.get_info(target_url)
+        if info.get('type') == 'playlist':
+            return info
         return {
+            "type": "video",
+            "title": info.get("title"),
+            "thumbnail": info.get("thumbnail"),
+            "duration": info.get("duration"),
+            "uploader": info.get("uploader"),
+            "extractor": info.get("extractor"),
+        }
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.get("/info")
+def extract_url_info_get(url: str = Query(..., description="Target URL")):
+    target_url = _resolve_info_url(url, None)
+    try:
+        info = downloader_service.get_info(target_url)
+        if info.get('type') == 'playlist':
+            return info
+        return {
+            "type": "video",
             "title": info.get("title"),
             "thumbnail": info.get("thumbnail"),
             "duration": info.get("duration"),

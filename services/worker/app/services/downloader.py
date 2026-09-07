@@ -1,7 +1,7 @@
 import os
 import re
 from pathlib import Path
-from typing import Callable, Optional, Dict, Any
+from typing import Callable, Optional, Dict, Any, List
 import yt_dlp
 
 
@@ -19,15 +19,62 @@ class Downloader:
         self.output_dir.mkdir(parents=True, exist_ok=True)
 
     def get_info(self, url: str) -> Dict[str, Any]:
-        """Extract metadata without downloading."""
+        """Extract metadata without downloading. Detect playlist vs video."""
         ydl_opts = {
             'quiet': True,
             'no_warnings': True,
-            'extract_flat': False,
+            'extract_flat': True,
             'skip_download': True,
         }
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            return ydl.extract_info(url, download=False)
+            info = ydl.extract_info(url, download=False)
+            # Detect playlist
+            if 'entries' in info and info['entries'] is not None:
+                entries = []
+                for entry in info['entries']:
+                    if entry:
+                        entries.append({
+                            'id': entry.get('id'),
+                            'title': entry.get('title'),
+                            'url': entry.get('url') or entry.get('webpage_url') or entry.get('id'),
+                            'duration': entry.get('duration'),
+                            'thumbnail': entry.get('thumbnail'),
+                        })
+                return {
+                    'type': 'playlist',
+                    'title': info.get('title'),
+                    'entries': entries,
+                    'count': len(entries),
+                }
+            else:
+                return {
+                    'type': 'video',
+                    'title': info.get('title'),
+                    'url': url,
+                    'duration': info.get('duration'),
+                    'thumbnail': info.get('thumbnail'),
+                    'uploader': info.get('uploader'),
+                    'extractor': info.get('extractor'),
+                }
+
+    def get_available_formats(self, url: str) -> List[Dict[str, Any]]:
+        """Return available quality/format options for a URL."""
+        ydl_opts = {'quiet': True, 'no_warnings': True, 'skip_download': True}
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            full = ydl.extract_info(url, download=False)
+            if 'entries' in full and full.get('entries'):
+                return []
+            formats = full.get('formats', [])
+            seen = set()
+            options = []
+            for f in formats:
+                height = f.get('height')
+                ext = f.get('ext')
+                if height and height not in seen:
+                    seen.add(height)
+                    options.append({'height': height, 'ext': ext, 'label': f"{height}p"})
+            options.sort(key=lambda x: x['height'], reverse=True)
+            return options
 
     def download(
         self,
