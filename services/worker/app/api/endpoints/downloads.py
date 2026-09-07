@@ -6,6 +6,7 @@ from app.database import get_db
 from app.models.download_job import DownloadJob
 from app.models.downloaded_file import DownloadedFile
 from app.services.downloader import Downloader
+from app.queue.redis_queue import queue
 
 router = APIRouter(prefix="/downloads", tags=["downloads"])
 downloader_service = Downloader()
@@ -44,6 +45,10 @@ def create_download(
     db.add(job)
     db.commit()
     db.refresh(job)
+
+    # Push to Redis queue with priority
+    queue.push_job(job.id, priority=job.priority)
+
     return {"job_id": job.id, "status": "queued", "job": job.to_dict()}
 
 
@@ -74,6 +79,10 @@ def create_batch_download(
     db.commit()
     for job in jobs:
         db.refresh(job)
+
+    # Push all jobs to Redis queue
+    for job in jobs:
+        queue.push_job(job.id, priority=job.priority)
 
     return {
         "message": f"Created {len(jobs)} download jobs",
@@ -137,6 +146,10 @@ def retry_download(job_id: int, db: Session = Depends(get_db)):
     job.retry_count = (job.retry_count or 0) + 1
     db.commit()
     db.refresh(job)
+
+    # Push to Redis queue for retry
+    queue.push_job(job.id, priority=job.priority)
+
     return {"success": True, "message": "Job queued for retry", "job": job.to_dict()}
 
 

@@ -7,6 +7,7 @@ from app.services.downloader import Downloader, clean_ansi
 from app.database import SessionLocal
 from app.models.download_job import DownloadJob
 from app.models.downloaded_file import DownloadedFile
+from app.queue.redis_queue import queue
 
 
 class DownloadWorker:
@@ -34,14 +35,24 @@ class DownloadWorker:
         while self.running:
             db = SessionLocal()
             try:
-                job = (
-                    db.query(DownloadJob)
-                    .filter_by(status="pending")
-                    .order_by(DownloadJob.priority.desc(), DownloadJob.created_at.asc())
-                    .first()
-                )
+                # Try to get job from Redis queue first (with priority)
+                job_id = queue.pop_job()
+                if job_id:
+                    job = db.query(DownloadJob).filter_by(id=job_id).first()
+                    if not job or job.status != "pending":
+                        # Job not found or already processed
+                        continue
+                else:
+                    # Fallback to database query
+                    job = (
+                        db.query(DownloadJob)
+                        .filter_by(status="pending")
+                        .order_by(DownloadJob.priority.desc(), DownloadJob.created_at.asc())
+                        .first()
+                    )
 
                 if job:
+                    queue.mark_processing(job.id)
                     job.status = "processing"
                     db.commit()
                     db.refresh(job)
@@ -69,6 +80,7 @@ class DownloadWorker:
                             db.commit()
                             if attempt < max_retries:
                                 await asyncio.sleep(2 ** attempt)
+                    queue.unmark_processing(job.id)
                     if not success:
                         job.status = "failed"
                         job.error_message = str(last_error) if last_error else "Unknown error"

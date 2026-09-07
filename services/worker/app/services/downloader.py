@@ -4,6 +4,8 @@ from pathlib import Path
 from typing import Callable, Optional, Dict, Any, List
 import yt_dlp
 
+from app.utils.cache import cached
+
 
 def clean_ansi(text: str) -> str:
     """Remove ANSI escape codes from yt-dlp percentage strings."""
@@ -18,6 +20,7 @@ class Downloader:
         self.output_dir = Path(output_dir).resolve()
         self.output_dir.mkdir(parents=True, exist_ok=True)
 
+    @cached(ttl=3600, prefix="video_info")
     def get_info(self, url: str) -> Dict[str, Any]:
         """Extract metadata without downloading. Detect playlist vs video."""
         ydl_opts = {
@@ -57,6 +60,7 @@ class Downloader:
                     'extractor': info.get('extractor'),
                 }
 
+    @cached(ttl=3600, prefix="video_formats")
     def get_available_formats(self, url: str) -> List[Dict[str, Any]]:
         """Return available quality/format options for a URL."""
         ydl_opts = {'quiet': True, 'no_warnings': True, 'skip_download': True}
