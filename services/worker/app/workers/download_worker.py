@@ -52,16 +52,30 @@ class DownloadWorker:
                         room=f"job:{job.id}"
                     )
 
-                    try:
-                        await self.download_video(job, db)
-                    except Exception as e:
-                        print(f"[DownloadWorker] Job {job.id} failed: {e}")
+                    # Retry loop with exponential backoff
+                    max_retries = 3
+                    success = False
+                    last_error = None
+                    for attempt in range(max_retries + 1):
+                        try:
+                            await self.download_video(job, db, resume=(attempt > 0))
+                            success = True
+                            break
+                        except Exception as e:
+                            last_error = e
+                            print(f"[DownloadWorker] Job {job.id} attempt {attempt + 1} failed: {e}")
+                            job.retry_count = attempt + 1
+                            job.error_message = str(e)
+                            db.commit()
+                            if attempt < max_retries:
+                                await asyncio.sleep(2 ** attempt)
+                    if not success:
                         job.status = "failed"
-                        job.error_message = str(e)
+                        job.error_message = str(last_error) if last_error else "Unknown error"
                         db.commit()
                         await self.emit_event(
                             "download:error",
-                            {"jobId": job.id, "error": str(e)},
+                            {"jobId": job.id, "error": str(last_error)},
                             room=f"job:{job.id}"
                         )
             except Exception as loop_err:
@@ -71,7 +85,7 @@ class DownloadWorker:
 
             await asyncio.sleep(1)
 
-    async def download_video(self, job: DownloadJob, db):
+    async def download_video(self, job: DownloadJob, db, resume: bool = False):
         loop = asyncio.get_running_loop()
 
         def progress_hook(d):
@@ -110,6 +124,7 @@ class DownloadWorker:
                 url=job.url,
                 job_id=job.id,
                 quality=job.quality or "best",
+                resume=resume,
                 progress_callback=progress_hook,
             )
 

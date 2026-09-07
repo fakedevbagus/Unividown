@@ -82,6 +82,7 @@ class Downloader:
         job_id: int,
         quality: str = "best",
         format_spec: str = "best",
+        resume: bool = False,
         progress_callback: Optional[Callable[[Dict[str, Any]], None]] = None,
     ) -> Dict[str, Any]:
         """Download video/audio to data/downloads/{job_id}."""
@@ -103,6 +104,7 @@ class Downloader:
             'quiet': False,
             'no_warnings': True,
             'progress_hooks': [progress_callback] if progress_callback else [],
+            'continue_dl': resume,  # Resume partial downloads
         }
 
         # If audio-only conversion is requested
