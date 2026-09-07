@@ -212,3 +212,24 @@ def get_processing_job(job_id: int, db: Session = Depends(get_db)):
     if not job:
         raise HTTPException(status_code=404, detail="Processing job not found")
     return job.to_dict()
+
+
+@router.post("/transcribe")
+async def transcribe_media(
+    file: UploadFile = File(...),
+    model: str = Form("tiny"),
+    db: Session = Depends(get_db),
+):
+    """Transcribe audio/video to text using Whisper"""
+    saved_path = await save_upload(file)
+    job = ProcessingJob(
+        tool_type="transcribe",
+        input_files=json.dumps([saved_path]),
+        parameters=json.dumps({"model": model}),
+        status="pending",
+        progress=0.0,
+    )
+    db.add(job)
+    db.commit()
+    db.refresh(job)
+    return {"job_id": job.id, "status": "queued", "model": model}

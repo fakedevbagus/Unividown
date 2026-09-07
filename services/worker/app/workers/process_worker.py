@@ -1,6 +1,7 @@
 import asyncio
 import json
 from app.services.processor import MediaProcessor
+from app.services.transcriber import Transcriber
 from app.database import SessionLocal
 from app.models.processing_job import ProcessingJob
 
@@ -8,6 +9,7 @@ from app.models.processing_job import ProcessingJob
 class ProcessWorker:
     def __init__(self):
         self.processor = MediaProcessor()
+        self.transcriber = Transcriber()
         self.running = True
 
     async def process_queue(self):
@@ -70,6 +72,11 @@ class ProcessWorker:
                 fps = int(params.get("fps", 15))
                 scale = int(params.get("scale", 480))
                 return self.processor.make_gif(input_files[0], start, duration, fps, scale, job.id)
+            # Phase 17: AI Transcription
+            elif job.tool_type == "transcribe":
+                model = params.get("model", "tiny")
+                result = self.transcriber.transcribe(input_files[0], model, job.id)
+                return result["transcript_path"]
             else:
                 raise ValueError(f"Unknown tool type: {job.tool_type}")
 
