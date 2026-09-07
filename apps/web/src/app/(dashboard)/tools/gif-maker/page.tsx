@@ -61,7 +61,7 @@ export default function GifMakerPage() {
 
       <div>
         <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-slate-100 flex items-center gap-2">
-          <Image className="w-6 h-6 text-indigo-600 dark:text-indigo-400" />
+          <Image className="w-6 h-6 text-indigo-600 dark:text-indigo-400" aria-hidden="true" />
           <span>GIF Maker</span>
         </h1>
         <p className="text-sm text-slate-500 mt-1">

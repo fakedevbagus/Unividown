@@ -1,0 +1,41 @@
+{
+  "name": "Unividown - Universal Media Downloader",
+  "short_name": "Unividown",
+  "description": "Download, convert, and process media with yt-dlp & FFmpeg",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f8fafc",
+  "theme_color": "#4f46e5",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["utilities", "productivity"],
+  "shortcuts": [
+    {
+      "name": "Download Media",
+      "short_name": "Download",
+      "description": "Download video or audio from URL",
+      "url": "/download",
+      "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Tools",
+      "short_name": "Tools",
+      "description": "Media conversion tools",
+      "url": "/tools",
+      "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }]
+    }
+  ]
+}
