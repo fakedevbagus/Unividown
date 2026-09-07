@@ -53,11 +53,28 @@ class ProcessWorker:
                 return self.processor.compress(input_files[0], bitrate, job.id)
             elif job.tool_type == "merge":
                 return self.processor.merge(input_files, job.id)
+            # Phase 16: New tool types
+            elif job.tool_type == "audio_convert":
+                fmt = params.get("format", "mp3")
+                return self.processor.extract_audio(input_files[0], fmt, job.id)
+            elif job.tool_type == "image_optimize":
+                quality = int(params.get("quality", 85))
+                max_width = int(params.get("max_width", 1920))
+                return self.processor.optimize_image(input_files[0], quality, max_width, job.id)
+            elif job.tool_type == "subtitle_extract":
+                result = self.processor.extract_subtitle(input_files[0], job.id)
+                return result[0] if result else ""
+            elif job.tool_type == "gif_make":
+                start = float(params.get("start", 0))
+                duration = float(params.get("duration", 5))
+                fps = int(params.get("fps", 15))
+                scale = int(params.get("scale", 480))
+                return self.processor.make_gif(input_files[0], start, duration, fps, scale, job.id)
             else:
                 raise ValueError(f"Unknown tool type: {job.tool_type}")
 
         output_path = await loop.run_in_executor(None, execute)
-        job.output_files = json.dumps([output_path])
+        job.output_files = json.dumps([output_path]) if output_path else json.dumps([])
         job.progress = 100.0
         job.status = "completed"
         db.commit()

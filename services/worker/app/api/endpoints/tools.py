@@ -106,6 +106,94 @@ async def merge_media(
     return {"job_id": job.id, "status": "queued"}
 
 
+# Phase 16: New tool endpoints
+@router.post("/audio/convert")
+async def audio_convert(
+    file: UploadFile = File(...),
+    format: str = Form("mp3"),
+    db: Session = Depends(get_db),
+):
+    """Extract/convert audio from video"""
+    saved_path = await save_upload(file)
+    job = ProcessingJob(
+        tool_type="audio_convert",
+        input_files=json.dumps([saved_path]),
+        parameters=json.dumps({"format": format}),
+        status="pending",
+        progress=0.0,
+    )
+    db.add(job)
+    db.commit()
+    db.refresh(job)
+    return {"job_id": job.id, "status": "queued"}
+
+
+@router.post("/image/optimize")
+async def image_optimize(
+    file: UploadFile = File(...),
+    quality: int = Form(85),
+    max_width: int = Form(1920),
+    db: Session = Depends(get_db),
+):
+    """Optimize image for web"""
+    saved_path = await save_upload(file)
+    job = ProcessingJob(
+        tool_type="image_optimize",
+        input_files=json.dumps([saved_path]),
+        parameters=json.dumps({"quality": quality, "max_width": max_width}),
+        status="pending",
+        progress=0.0,
+    )
+    db.add(job)
+    db.commit()
+    db.refresh(job)
+    return {"job_id": job.id, "status": "queued"}
+
+
+@router.post("/subtitle/extract")
+async def subtitle_extract(
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+):
+    """Extract subtitles from video"""
+    saved_path = await save_upload(file)
+    job = ProcessingJob(
+        tool_type="subtitle_extract",
+        input_files=json.dumps([saved_path]),
+        parameters=json.dumps({}),
+        status="pending",
+        progress=0.0,
+    )
+    db.add(job)
+    db.commit()
+    db.refresh(job)
+    return {"job_id": job.id, "status": "queued"}
+
+
+@router.post("/gif/make")
+async def gif_make(
+    file: UploadFile = File(...),
+    start: float = Form(0.0),
+    duration: float = Form(5.0),
+    fps: int = Form(15),
+    scale: int = Form(480),
+    db: Session = Depends(get_db),
+):
+    """Create GIF from video"""
+    saved_path = await save_upload(file)
+    job = ProcessingJob(
+        tool_type="gif_make",
+        input_files=json.dumps([saved_path]),
+        parameters=json.dumps({"start": start, "duration": duration, "fps": fps, "scale": scale}),
+        status="pending",
+        progress=0.0,
+    )
+    db.add(job)
+    db.commit()
+    db.refresh(job)
+    return {"job_id": job.id, "status": "queued"}
+
+
 @router.get("/jobs")
 def list_processing_jobs(
     status: Optional[str] = None,
