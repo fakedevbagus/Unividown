@@ -1,0 +1,170 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+  release:
+    types: [published]
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  lint-and-test:
+    name: Lint & Test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+          run_install: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run linting
+        run: pnpm lint
+
+      - name: Run type checking
+        run: pnpm typecheck
+
+      - name: Build web
+        run: pnpm --filter @unividown/web build
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install worker dependencies
+        run: |
+          cd services/worker
+          pip install -r requirements.txt
+
+      - name: Run worker tests
+        run: |
+          cd services/worker
+          pytest -v
+
+      - name: Build worker Docker image
+        run: |
+          docker build -t ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-worker:${{ github.sha }} -f docker/Dockerfile.worker .
+
+      - name: Build web Docker image
+        run: |
+          docker build -t ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-web:${{ github.sha }} -f docker/Dockerfile.web .
+
+  security-scan:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    needs: lint-and-test
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: 'fs'
+          scan-ref: '.'
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+          severity: 'CRITICAL,HIGH'
+
+      - name: Upload Trivy results to GitHub Security
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: 'trivy-results.sarif'
+
+      - name: Scan Docker images
+        run: |
+          trivy image --severity CRITICAL,HIGH ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-worker:${{ github.sha }}
+          trivy image --severity CRITICAL,HIGH ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-web:${{ github.sha }}
+
+  deploy-staging:
+    name: Deploy to Staging
+    runs-on: ubuntu-latest
+    needs: [lint-and-test, security-scan]
+    if: github.ref == 'refs/heads/develop'
+    environment: staging
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Deploy to staging
+        run: |
+          echo "Deploying to staging environment..."
+          # Add your staging deployment commands here
+          # e.g., kubectl apply, docker-compose, etc.
+
+  deploy-production:
+    name: Deploy to Production
+    runs-on: ubuntu-latest
+    needs: [lint-and-test, security-scan]
+    if: github.event_name == 'release'
+    environment: production
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push worker
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: docker/Dockerfile.worker
+          push: true
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-worker:${{ github.event.release.tag_name }}
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-worker:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build and push web
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: docker/Dockerfile.web
+          push: true
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-web:${{ github.event.release.tag_name }}
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-web:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Deploy to production
+        run: |
+          echo "Deploying to production..."
+          # Add your production deployment commands here
+          # e.g., kubectl apply, docker-compose, etc.
+          # Example:
+          # kubectl set image deployment/unividown-web unividown-web=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-web:${{ github.event.release.tag_name }}
+          # kubectl set image deployment/unividown-worker unividown-worker=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-worker:${{ github.event.release.tag_name }}
+
+      - name: Notify deployment
+        if: always()
+        run: |
+          echo "Deployment completed with status: ${{ job.status }}"

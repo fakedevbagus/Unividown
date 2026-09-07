@@ -5,8 +5,6 @@ services:
     build:
       context: .
       dockerfile: docker/Dockerfile.web
-    ports:
-      - "3000:3000"
     environment:
       - NODE_ENV=production
       - WORKER_URL=http://worker:8000
@@ -15,30 +13,58 @@ services:
     volumes:
       - ./data:/app/data
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+        reservations:
+          memory: 256M
 
   worker:
     build:
       context: .
       dockerfile: docker/Dockerfile.worker
-    ports:
-      - "8000:8000"
     environment:
       - PYTHON_ENV=production
       - DATABASE_URL=sqlite:////app/data/unividown.db
       - UPLOAD_DIR=/app/data/uploads
       - DOWNLOAD_DIR=/app/data/downloads
       - PROCESSED_DIR=/app/data/processed
+      - REDIS_URL=redis://redis:6379
     volumes:
       - ./data:/app/data
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+        reservations:
+          memory: 1G
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 256M
 
   nginx:
     image: nginx:alpine
     ports:
       - "80:80"
+      - "443:443"
     volumes:
       - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/ssl:/etc/nginx/ssl:ro
     depends_on:
       - web
       - worker
     restart: unless-stopped
+
+volumes:
+  redis-data:
