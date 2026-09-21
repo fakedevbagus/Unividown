@@ -7,8 +7,13 @@ RUN apt-get -o Acquire::Retries=3 update && \
 COPY services/worker/requirements.txt services/worker/requirements-ai.txt ./
 RUN pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir -r requirements.txt && \
-    pip install --no-cache-dir --upgrade setuptools==84.0.0 wheel==0.48.0 jaraco.context==6.1.2 msgpack==1.2.2 && \
-    if [ "$INSTALL_AI" = "true" ]; then pip install --no-cache-dir -r requirements-ai.txt; fi
+    if [ "$INSTALL_AI" = "true" ]; then pip install --no-cache-dir -r requirements-ai.txt; fi && \
+    pip uninstall -y msgpack setuptools wheel jaraco.context && \
+    pip install --no-cache-dir msgpack==1.2.2 && \
+    rm -rf /usr/local/lib/python3.11/site-packages/setuptools* \
+           /usr/local/lib/python3.11/site-packages/wheel* \
+           /usr/local/lib/python3.11/site-packages/jaraco/context* \
+           /root/.cache
 COPY services/worker /app
 ENV PYTHONUNBUFFERED=1 DATABASE_URL="sqlite:////app/data/unividown.db" UPLOAD_DIR="/app/data/uploads" DOWNLOAD_DIR="/app/data/downloads" PROCESSED_DIR="/app/data/processed"
 EXPOSE 8000
