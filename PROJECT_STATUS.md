@@ -1,8 +1,8 @@
 # Unividown Project Status
 
 Last updated: 2026-09-21 22:35 Asia/Jakarta
-Active branch: `fix/download-info-and-queue-reliability`
-Baseline main: `2060d00e5366e672fcbaf98d00f79266b45abd7c`
+Active branch: `feat/result-serving-and-job-lifecycle`
+Baseline main: `4582fe8cad5ca1dc633038a68814ccacc8b28353`
 
 ## Phase status
 
@@ -11,7 +11,7 @@ Baseline main: `2060d00e5366e672fcbaf98d00f79266b45abd7c`
 | 0 — baseline, guardrails, docs | Complete in review branch | Documentation and PR evidence prepared |
 | 1 — startup, Docker, CI, Socket.IO, metrics | Complete in security-upgrade review branch | Runtime, Docker/Compose, tests, and security policy are green |
 | Security dependency upgrade | Complete in draft PR #2 | Framework/runtime upgrades and image scans pass |
-| 2 — download lifecycle | In progress | Route info and queue reliability implemented; result serving/cancel lifecycle remain next |
+| 2 — download lifecycle | In progress | Phase 2A merged; result serving, cancellation, recovery, and file upsert implemented for review |
 | 3–7 | Deferred | Not started |
 
 ## Feature matrix
@@ -32,6 +32,9 @@ Baseline main: `2060d00e5366e672fcbaf98d00f79266b45abd7c`
 | Core worker without Whisper | Working | Core image starts without Whisper; unavailable endpoint returns 503 |
 | Download create without Redis | Working in local/test mode | Optional Redis returns database fallback; required failure returns 503 without orphan jobs |
 | `/api/downloads/info` | Working in regression test | Static route is registered before `/{job_id}` |
+| Download result serving | In review | Per-job containment and UI download actions implemented |
+| Active download cancellation | In review | Cooperative cancellation interrupts yt-dlp at progress callbacks |
+| Restart recovery | In review | Interrupted download jobs return to pending on worker startup |
 | Processing results UI | Deferred | Phase 3–4 |
 
 ## Architecture decisions
@@ -65,9 +68,8 @@ Baseline main: `2060d00e5366e672fcbaf98d00f79266b45abd7c`
 
 ### P0/P1 deferred to Phase 2+
 
-- `/api/downloads/info` conflicts with `/{job_id}`.
-- Enqueue errors can leave database jobs behind; download worker fallback is interrupted by Redis errors.
-- Upload filename/path validation and result serving remain unresolved.
+- Upload filename/path validation for media tools remains unresolved.
+- Cancellation is cooperative and occurs at yt-dlp progress boundaries; hard subprocess termination remains future hardening.
 
 ### Quality debt
 
@@ -76,7 +78,7 @@ Baseline main: `2060d00e5366e672fcbaf98d00f79266b45abd7c`
 
 ## Next exact step
 
-Review the first Phase 2 PR for route/queue reliability. After CI is green, merge only with explicit approval, then continue result serving and real cancellation in a separate PR.
+Validate the Phase 2B patch locally and in CI, then review result serving, cooperative cancellation, file upsert, and restart recovery before merge.
 
 
 ## Phase 2 implementation evidence

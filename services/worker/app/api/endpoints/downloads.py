@@ -1,14 +1,18 @@
+from pathlib import Path
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
+from app.config import settings
 from app.database import get_db
 from app.models.download_job import DownloadJob
 from app.models.downloaded_file import DownloadedFile
 from app.queue.redis_queue import QueueUnavailable, queue
 from app.services.downloader import Downloader
+from app.workers.cancellation import cancellation_registry
 
 router = APIRouter(prefix="/downloads", tags=["downloads"])
 downloader_service = Downloader()
@@ -72,6 +76,25 @@ def _delete_jobs(db: Session, jobs: List[DownloadJob]):
             synchronize_session=False
         )
         db.commit()
+
+
+def _serialize_file(file: DownloadedFile):
+    return {
+        "id": file.id,
+        "job_id": file.job_id,
+        "filename": file.filename,
+        "file_type": file.file_type,
+        "file_size": file.file_size,
+        "download_url": f"/api/downloads/{file.job_id}/files/{file.id}",
+    }
+
+
+def _serialize_job(db: Session, job: DownloadJob, include_files: bool = False):
+    data = job.to_dict()
+    if include_files:
+        files = db.query(DownloadedFile).filter_by(job_id=job.id).all()
+        data["files"] = [_serialize_file(file) for file in files]
+    return data
 
 
 def _enqueue_jobs(db: Session, jobs: List[DownloadJob]) -> bool:
@@ -158,7 +181,7 @@ def list_downloads(
     if status:
         query = query.filter_by(status=status)
     jobs = query.order_by(DownloadJob.id.desc()).offset(offset).limit(limit).all()
-    return [job.to_dict() for job in jobs]
+    return [_serialize_job(db, job, include_files=True) for job in jobs]
 
 
 @router.get("/{job_id}")
@@ -167,10 +190,36 @@ def get_download(job_id: int, db: Session = Depends(get_db)):
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
 
-    files = db.query(DownloadedFile).filter_by(job_id=job_id).all()
-    data = job.to_dict()
-    data["files"] = [file.to_dict() for file in files]
-    return data
+    return _serialize_job(db, job, include_files=True)
+
+
+@router.get("/{job_id}/files/{file_id}")
+def download_result_file(
+    job_id: int, file_id: int, db: Session = Depends(get_db)
+):
+    file = (
+        db.query(DownloadedFile)
+        .filter_by(id=file_id, job_id=job_id)
+        .first()
+    )
+    if not file:
+        raise HTTPException(status_code=404, detail="File not found")
+
+    root = (Path(settings.download_dir).resolve() / str(job_id)).resolve()
+    candidate = Path(file.file_path).resolve()
+    try:
+        candidate.relative_to(root)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail="File not available") from exc
+
+    if not candidate.is_file():
+        raise HTTPException(status_code=404, detail="File not available")
+
+    return FileResponse(
+        path=candidate,
+        filename=file.filename,
+        media_type="application/octet-stream",
+    )
 
 
 @router.delete("/{job_id}")
@@ -180,8 +229,13 @@ def cancel_or_delete_download(job_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Job not found")
 
     if job.status in ["pending", "processing"]:
+        was_processing = job.status == "processing"
         job.status = "cancelled"
         db.commit()
+        if was_processing:
+            cancellation_registry.request(job_id)
+        else:
+            cancellation_registry.clear(job_id)
         try:
             queue.remove_jobs([job_id])
         except QueueUnavailable:
@@ -220,6 +274,7 @@ def retry_download(job_id: int, db: Session = Depends(get_db)):
     job.retry_count = (job.retry_count or 0) + 1
     db.commit()
     db.refresh(job)
+    cancellation_registry.clear(job_id)
 
     try:
         queued_in_redis = queue.push_jobs([(job.id, job.priority or 0)])
