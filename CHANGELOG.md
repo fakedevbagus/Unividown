@@ -12,6 +12,7 @@ All notable changes to Unividown are documented here.
 - Regression tests for health behavior, Prometheus metrics, Socket.IO polling handshake, and optional transcription capability.
 - Redis and service health checks in development and production Compose definitions.
 - Optional AI requirements file for Whisper.
+- Docker context exclusions for dependencies, build caches, data, and local environments.
 
 ### Changed
 
@@ -20,12 +21,15 @@ All notable changes to Unividown are documented here.
 - Metrics are imported correctly and HTTP request metrics are recorded.
 - CI pins supported runtimes, supplies Redis explicitly, transfers built images to the security-scan job, and removes placeholder deployment behavior.
 - Core worker dependency/image no longer installs Whisper; the transcription endpoint returns a clear 503 when the optional AI profile is absent.
+- Web image setup retries transient pnpm/Corepack downloads.
 
 ### Fixed
 
 - Missing `/metrics` imports that previously raised `NameError`.
 - Missing CI `typecheck` script.
 - Security scans attempting to inspect images unavailable on their runner.
+- Local typecheck failures caused by stale generated `.next/types` entries from removed routes.
+- Docker contexts unnecessarily transferring local `node_modules`, `.next`, data, and virtual environments.
 
 ### Deferred
 

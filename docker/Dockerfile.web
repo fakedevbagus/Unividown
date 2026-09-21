@@ -1,6 +1,11 @@
 FROM node:20-alpine AS base
 WORKDIR /app
-RUN corepack enable && corepack prepare pnpm@9.15.5 --activate
+RUN corepack enable && \
+    for attempt in 1 2 3; do \
+      corepack prepare pnpm@9.15.5 --activate && break; \
+      if [ "$attempt" = "3" ]; then exit 1; fi; \
+      sleep 5; \
+    done
 
 FROM base AS deps
 COPY pnpm-lock.yaml pnpm-workspace.yaml package.json ./
