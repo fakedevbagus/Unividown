@@ -34,3 +34,10 @@ All notable changes to Unividown are documented here.
 ### Deferred
 
 - Download route order, Redis queue fallback/atomicity, uploads, result serving, and all Phase 2+ behavior remain intentionally unchanged.
+
+### Security upgrade branch
+
+- Upgraded Next.js to 15.5.24 and React/React DOM to 19.2.0.
+- Updated React types, Next ESLint configuration, and PostCSS to patched versions.
+- Converted the production web image to Next standalone output so build tooling, pnpm, and dev dependencies are excluded from runtime.
+- Added Alpine package upgrades to the web base and upgraded Python packaging tools in the worker image.

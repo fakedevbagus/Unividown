@@ -1,7 +1,7 @@
 # Unividown Project Status
 
 Last updated: 2026-09-21 19:00 Asia/Jakarta  
-Active branch: `chore/baseline-runtime-recovery`  
+Active branch: `chore/security-dependency-upgrades`  
 Baseline main: `2060d00e5366e672fcbaf98d00f79266b45abd7c`
 
 ## Phase status
@@ -71,3 +71,12 @@ Baseline main: `2060d00e5366e672fcbaf98d00f79266b45abd7c`
 ## Next exact step
 
 Triage the worker-image HIGH/CRITICAL Trivy findings without suppressing them, apply only safe Phase 1-compatible base-image or patch/minor dependency fixes, and rerun both worker and web image scans. Keep PR #1 draft and do not start Phase 2 until the security job is green and the Phase 1 gate is approved.
+
+
+## Security dependency upgrade
+
+- Draft PR: #2, temporarily based on `main` so full CI runs against the cumulative candidate.
+- Next.js 15.5.24, React 19.2.0, matching React types, Next ESLint config, and PostCSS are applied.
+- Web production image uses standalone output and excludes pnpm/dev dependencies from runtime.
+- Local frozen install, lint, typecheck, and production build pass.
+- Next gate: worker tests, Docker builds, Compose smoke, and Trivy image policy in GitHub Actions.
