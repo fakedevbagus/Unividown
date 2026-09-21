@@ -18,5 +18,10 @@
   "packageManager": "pnpm@9.15.5",
   "engines": {
     "node": ">=20"
+  },
+  "pnpm": {
+    "overrides": {
+      "postcss": "8.5.18"
+    }
   }
 }
