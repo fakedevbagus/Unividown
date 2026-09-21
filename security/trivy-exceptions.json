@@ -1,5 +1,15 @@
 {
   "exceptions": [
+    {"id":"CVE-2026-75146","image":"worker","package":"ffmpeg","expires":"2026-10-21","reason":"Debian Bookworm reports no fixed version; required media runtime; accepted temporarily after local and CI smoke tests."},
+    {"id":"CVE-2026-75144","image":"worker","package":"ffmpeg","expires":"2026-10-21","reason":"Debian Bookworm reports no fixed version; required media runtime; accepted temporarily after local and CI smoke tests."},
+    {"id":"CVE-2026-75143","image":"worker","package":"ffmpeg","expires":"2026-10-21","reason":"Debian Bookworm reports no fixed version; required media runtime; accepted temporarily after local and CI smoke tests."},
+    {"id":"CVE-2026-75142","image":"worker","package":"ffmpeg","expires":"2026-10-21","reason":"Debian Bookworm reports no fixed version; required media runtime; accepted temporarily after local and CI smoke tests."},
+    {"id":"CVE-2026-70632","image":"worker","package":"ffmpeg","expires":"2026-10-21","reason":"Debian Bookworm reports no fixed version; required media runtime; accepted temporarily after local and CI smoke tests."},
+    {"id":"CVE-2026-70628","image":"worker","package":"ffmpeg","expires":"2026-10-21","reason":"Debian Bookworm reports no fixed version; required media runtime; accepted temporarily after local and CI smoke tests."},
+    {"id":"CVE-2026-66040","image":"worker","package":"ffmpeg","expires":"2026-10-21","reason":"Debian Bookworm reports no fixed version; required media runtime; accepted temporarily after local and CI smoke tests."},
+    {"id":"CVE-2026-66039","image":"worker","package":"ffmpeg","expires":"2026-10-21","reason":"Debian Bookworm reports no fixed version; required media runtime; accepted temporarily after local and CI smoke tests."},
+    {"id":"CVE-2026-66036","image":"worker","package":"ffmpeg","expires":"2026-10-21","reason":"Debian Bookworm reports no fixed version; required media runtime; accepted temporarily after local and CI smoke tests."},
+    {"id":"CVE-2026-64835","image":"worker","package":"ffmpeg","expires":"2026-10-21","reason":"Debian Bookworm reports no fixed version; required media runtime; accepted temporarily after local and CI smoke tests."},
     {"id":"CVE-2026-64834","image":"worker","package":"ffmpeg","expires":"2026-10-21","reason":"Debian Bookworm reports no fixed version; required media runtime; accepted temporarily after local and CI smoke tests."},
     {"id":"CVE-2026-64833","image":"worker","package":"ffmpeg","expires":"2026-10-21","reason":"Debian Bookworm reports no fixed version; required media runtime; accepted temporarily after local and CI smoke tests."},
     {"id":"CVE-2026-64832","image":"worker","package":"ffmpeg","expires":"2026-10-21","reason":"Debian Bookworm reports no fixed version; required media runtime; accepted temporarily after local and CI smoke tests."},
