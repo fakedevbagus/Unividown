@@ -1,6 +1,7 @@
 from fastapi.testclient import TestClient
 from app.main import app
 from app.database import init_db
+from app.api.endpoints.downloads import queue
 
 # Ensure tables are initialized for testing
 init_db()
@@ -15,7 +16,9 @@ def test_status_endpoint():
         assert data["service"] == "unividown-worker"
 
 
-def test_create_and_list_downloads():
+def test_create_and_list_downloads(monkeypatch):
+    # Queue reliability is Phase 2; isolate this API test from external Redis.
+    monkeypatch.setattr(queue, "push_job", lambda *args, **kwargs: None)
     with TestClient(app) as client:
         # Create job
         create_res = client.post("/api/downloads", json={"url": "https://example.com/video", "quality": "720"})

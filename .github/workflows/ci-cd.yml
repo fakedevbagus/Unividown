@@ -1,170 +1,126 @@
-name: CI/CD Pipeline
+name: CI
 
 on:
   push:
     branches: [main, develop]
   pull_request:
     branches: [main]
-  release:
-    types: [published]
+  schedule:
+    - cron: '0 6 * * 1'
 
 env:
-  REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository }}
+  WORKER_IMAGE: unividown-worker:${{ github.sha }}
+  WEB_IMAGE: unividown-web:${{ github.sha }}
 
 jobs:
-  lint-and-test:
-    name: Lint & Test
+  lint-test-build:
+    name: Lint, test, and build
     runs-on: ubuntu-latest
+    services:
+      redis:
+        image: redis:7-alpine
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v4
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
         with:
-          version: 9
+          version: 9.15.5
           run_install: false
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: '20'
-          cache: 'pnpm'
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Run linting
-        run: pnpm lint
-
-      - name: Run type checking
-        run: pnpm typecheck
-
-      - name: Build web
-        run: pnpm --filter @unividown/web build
-
-      - name: Setup Python
-        uses: actions/setup-python@v5
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm lint
+      - run: pnpm typecheck
+      - run: pnpm build
+      - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-          cache: 'pip'
-
-      - name: Install worker dependencies
+          cache: pip
+      - run: pip install -r services/worker/requirements.txt
+      - name: Worker tests
+        env:
+          REDIS_URL: redis://localhost:6379/0
+          REDIS_REQUIRED: 'true'
+        run: cd services/worker && pytest -v
+      - run: docker build -t "$WORKER_IMAGE" -f docker/Dockerfile.worker .
+      - name: Inventory worker Python packages
         run: |
-          cd services/worker
-          pip install -r requirements.txt
-
-      - name: Run worker tests
+          inventory=$(docker run --rm "$WORKER_IMAGE" python -c "import glob, importlib.metadata as m; names=['msgpack','setuptools']; print('; '.join(f'{name}={next((d.version for d in m.distributions() if d.metadata.get(\"Name\",\"\").lower()==name),\"absent\")}' for name in names)); print('metadata=' + ','.join(glob.glob('/usr/local/lib/python3.11/site-packages/*msgpack*') + glob.glob('/usr/local/lib/python3.11/site-packages/*setuptools*') + glob.glob('/usr/local/lib/python3.11/ensurepip/_bundled/*')))" | tr '\n' ' ')
+          echo "::notice title=Worker Python package inventory::$inventory"
+      - run: docker build -t "$WEB_IMAGE" -f docker/Dockerfile.web .
+      - name: Validate Compose and run development smoke test
         run: |
-          cd services/worker
-          pytest -v
-
-      - name: Build worker Docker image
-        run: |
-          docker build -t ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-worker:${{ github.sha }} -f docker/Dockerfile.worker .
-
-      - name: Build web Docker image
-        run: |
-          docker build -t ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-web:${{ github.sha }} -f docker/Dockerfile.web .
+          docker compose -f docker-compose.dev.yml config --quiet
+          docker compose -f docker-compose.yml config --quiet
+          trap 'docker compose -f docker-compose.dev.yml down -v' EXIT
+          docker compose -f docker-compose.dev.yml up -d --build --wait
+          curl -fsS http://localhost:8000/api/health/live
+          curl -fsS http://localhost:8000/api/health/ready
+          curl -fsS http://localhost:8000/metrics | grep -q http_requests_total
+          curl -fsS 'http://localhost:8000/socket.io/?EIO=4&transport=polling' | grep -q '^0{'
+          curl -fsS http://localhost:3000 >/dev/null
+      - run: docker save "$WORKER_IMAGE" "$WEB_IMAGE" | gzip > images.tar.gz
+      - uses: actions/upload-artifact@v4
+        with:
+          name: docker-images
+          path: images.tar.gz
+          retention-days: 1
 
   security-scan:
-    name: Security Scan
+    name: Security scan
     runs-on: ubuntu-latest
-    needs: lint-and-test
+    needs: lint-test-build
+    permissions:
+      security-events: write
+      contents: read
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Run Trivy vulnerability scanner
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: docker-images
+      - run: gunzip -c images.tar.gz | docker load
+      - name: Filesystem scan
         uses: aquasecurity/trivy-action@master
         with:
-          scan-type: 'fs'
-          scan-ref: '.'
-          format: 'sarif'
-          output: 'trivy-results.sarif'
-          severity: 'CRITICAL,HIGH'
-
-      - name: Upload Trivy results to GitHub Security
-        uses: github/codeql-action/upload-sarif@v3
+          scan-type: fs
+          scan-ref: .
+          format: sarif
+          output: trivy-results.sarif
+          severity: CRITICAL,HIGH
+      - uses: github/codeql-action/upload-sarif@v4
         with:
-          sarif_file: 'trivy-results.sarif'
-
-      - name: Scan Docker images
-        run: |
-          trivy image --severity CRITICAL,HIGH ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-worker:${{ github.sha }}
-          trivy image --severity CRITICAL,HIGH ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-web:${{ github.sha }}
-
-  deploy-staging:
-    name: Deploy to Staging
-    runs-on: ubuntu-latest
-    needs: [lint-and-test, security-scan]
-    if: github.ref == 'refs/heads/develop'
-    environment: staging
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Deploy to staging
-        run: |
-          echo "Deploying to staging environment..."
-          # Add your staging deployment commands here
-          # e.g., kubectl apply, docker-compose, etc.
-
-  deploy-production:
-    name: Deploy to Production
-    runs-on: ubuntu-latest
-    needs: [lint-and-test, security-scan]
-    if: github.event_name == 'release'
-    environment: production
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Login to Container Registry
-        uses: docker/login-action@v3
+          sarif_file: trivy-results.sarif
+      - name: Scan worker image
+        uses: aquasecurity/trivy-action@master
         with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Build and push worker
-        uses: docker/build-push-action@v5
+          image-ref: ${{ env.WORKER_IMAGE }}
+          format: json
+          output: worker-trivy.json
+          severity: CRITICAL,HIGH
+          exit-code: '0'
+      - name: Scan web image
+        uses: aquasecurity/trivy-action@master
         with:
-          context: .
-          file: docker/Dockerfile.worker
-          push: true
-          tags: |
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-worker:${{ github.event.release.tag_name }}
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-worker:latest
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
-      - name: Build and push web
-        uses: docker/build-push-action@v5
-        with:
-          context: .
-          file: docker/Dockerfile.web
-          push: true
-          tags: |
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-web:${{ github.event.release.tag_name }}
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-web:latest
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
-      - name: Deploy to production
-        run: |
-          echo "Deploying to production..."
-          # Add your production deployment commands here
-          # e.g., kubectl apply, docker-compose, etc.
-          # Example:
-          # kubectl set image deployment/unividown-web unividown-web=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-web:${{ github.event.release.tag_name }}
-          # kubectl set image deployment/unividown-worker unividown-worker=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-worker:${{ github.event.release.tag_name }}
-
-      - name: Notify deployment
+          image-ref: ${{ env.WEB_IMAGE }}
+          format: json
+          output: web-trivy.json
+          severity: CRITICAL,HIGH
+          exit-code: '0'
+      - name: Enforce image vulnerability policy
+        run: python scripts/enforce_trivy_policy.py security/trivy-exceptions.json worker=worker-trivy.json web=web-trivy.json
+      - uses: actions/upload-artifact@v4
         if: always()
-        run: |
-          echo "Deployment completed with status: ${{ job.status }}"
+        with:
+          name: trivy-image-reports
+          path: '*-trivy.json'
+          retention-days: 7
+
+# Deployment is intentionally not configured. Releases must not imply a deployment
+# until VPS credentials, environment protection, and a rollback runbook exist.

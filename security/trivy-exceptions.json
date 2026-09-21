@@ -1,0 +1,11 @@
+{
+  "exceptions": [],
+  "unfixed_os_package_exceptions": [
+    {
+      "image": "worker",
+      "package": "*",
+      "expires": "2026-10-21",
+      "reason": "Temporary user-approved exception for Debian Bookworm OS packages that Trivy reports without any fixed version. Fixed OS findings, application dependencies, and all web-image findings remain blocking."
+    }
+  ]
+}

@@ -14,6 +14,8 @@ from app.api.endpoints.tools import router as tools_router
 from app.workers.download_worker import DownloadWorker
 from app.workers.process_worker import ProcessWorker
 from app.middleware.rate_limit import RateLimitMiddleware
+from app.utils.health import build_readiness_report
+from app.utils.metrics import get_metrics, get_content_type, record_http_request
 from app.utils.logger import (
     logger, log_request, log_response, 
     log_download_event, log_processing_event,
@@ -123,6 +125,7 @@ async def log_requests(request: Request, call_next):
             status_code=response.status_code,
             duration_ms=duration_ms,
         )
+        record_http_request(request.method, request.url.path, response.status_code, duration_ms / 1000)
         
         return response
     except Exception as e:
@@ -146,6 +149,7 @@ app.include_router(tools_router, prefix="/api")
 
 @app.get("/api/status")
 @app.get("/api/health")
+@app.get("/api/health/live")
 def get_system_status():
     return {
         "status": "online",
@@ -153,6 +157,14 @@ def get_system_status():
         "version": "1.0.0",
         "environment": "production" if not settings.debug else "development",
     }
+
+
+@app.get("/api/health/ready")
+def get_readiness(response: Response):
+    report = build_readiness_report([worker_task, process_task])
+    if not report["ready"]:
+        response.status_code = 503
+    return report
 
 
 # Prometheus metrics endpoint
