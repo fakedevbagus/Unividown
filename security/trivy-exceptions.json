@@ -1,0 +1,14 @@
+{
+  "exceptions": [
+    {"id":"CVE-2026-64834","image":"worker","package":"ffmpeg","expires":"2026-10-21","reason":"Debian Bookworm reports no fixed version; required media runtime; accepted temporarily after local and CI smoke tests."},
+    {"id":"CVE-2026-64833","image":"worker","package":"ffmpeg","expires":"2026-10-21","reason":"Debian Bookworm reports no fixed version; required media runtime; accepted temporarily after local and CI smoke tests."},
+    {"id":"CVE-2026-64832","image":"worker","package":"ffmpeg","expires":"2026-10-21","reason":"Debian Bookworm reports no fixed version; required media runtime; accepted temporarily after local and CI smoke tests."},
+    {"id":"CVE-2026-64830","image":"worker","package":"ffmpeg","expires":"2026-10-21","reason":"Debian Bookworm reports no fixed version; required media runtime; accepted temporarily after local and CI smoke tests."},
+    {"id":"CVE-2026-58049","image":"worker","package":"ffmpeg","expires":"2026-10-21","reason":"Debian Bookworm reports no fixed version; required media runtime; accepted temporarily after local and CI smoke tests."},
+    {"id":"CVE-2026-78410","image":"worker","package":"bsdutils","expires":"2026-10-21","reason":"Present in the supported Debian base image with no fixed version; accepted temporarily pending upstream patch."},
+    {"id":"CVE-2026-78409","image":"worker","package":"bsdutils","expires":"2026-10-21","reason":"Present in the supported Debian base image with no fixed version; accepted temporarily pending upstream patch."},
+    {"id":"CVE-2026-78408","image":"worker","package":"bsdutils","expires":"2026-10-21","reason":"Present in the supported Debian base image with no fixed version; accepted temporarily pending upstream patch."},
+    {"id":"CVE-2026-76642","image":"worker","package":"bsdutils","expires":"2026-10-21","reason":"Present in the supported Debian base image with no fixed version; accepted temporarily pending upstream patch."},
+    {"id":"CVE-2026-53613","image":"worker","package":"bsdutils","expires":"2026-10-21","reason":"Present in the supported Debian base image with no fixed version; accepted temporarily pending upstream patch."}
+  ]
+}

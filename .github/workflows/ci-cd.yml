@@ -5,6 +5,8 @@ on:
     branches: [main, develop]
   pull_request:
     branches: [main]
+  schedule:
+    - cron: '0 6 * * 1'
 
 env:
   WORKER_IMAGE: unividown-worker:${{ github.sha }}
@@ -88,7 +90,7 @@ jobs:
           format: sarif
           output: trivy-results.sarif
           severity: CRITICAL,HIGH
-      - uses: github/codeql-action/upload-sarif@v3
+      - uses: github/codeql-action/upload-sarif@v4
         with:
           sarif_file: trivy-results.sarif
       - name: Scan worker image
@@ -108,17 +110,7 @@ jobs:
           severity: CRITICAL,HIGH
           exit-code: '0'
       - name: Enforce image vulnerability policy
-        shell: bash
-        run: |
-          total=0
-          for report in worker-trivy.json web-trivy.json; do
-            image=${report%-trivy.json}
-            count=$(jq '[.Results[]?.Vulnerabilities[]? | select(.Severity == "CRITICAL" or .Severity == "HIGH")] | length' "$report")
-            total=$((total + count))
-            jq -r --arg image "$image" '.Results[]?.Vulnerabilities[]? | select(.Severity == "CRITICAL" or .Severity == "HIGH") | "::error title=Trivy " + $image + " " + .Severity + " " + .VulnerabilityID + "::package=" + .PkgName + " installed=" + .InstalledVersion + " fixed=" + (.FixedVersion // "unfixed")' "$report"
-          done
-          echo "HIGH/CRITICAL image findings: $total"
-          test "$total" -eq 0
+        run: python scripts/enforce_trivy_policy.py security/trivy-exceptions.json worker=worker-trivy.json web=web-trivy.json
       - uses: actions/upload-artifact@v4
         if: always()
         with:
