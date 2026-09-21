@@ -35,7 +35,7 @@ def main() -> int:
     policy = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
     exceptions = policy.get("exceptions", [])
     today = date.today()
-    blocked = 0
+    blocked = []
     excepted = 0
     rows = []
 
@@ -59,9 +59,11 @@ def main() -> int:
                     continue
                 detail += f" exception expired={expiry}"
 
-            blocked += 1
-            annotation("error", title, detail)
+            blocked.append(f"{image}:{finding['Severity']}:{vuln_id}:{package}:{fixed}")
             rows.append((image, vuln_id, package, "blocked", "-"))
+
+    if blocked:
+        annotation("error", f"Trivy blocked {len(blocked)} findings", "; ".join(blocked))
 
     summary_path = os.getenv("GITHUB_STEP_SUMMARY")
     if summary_path:
@@ -70,9 +72,9 @@ def main() -> int:
             summary.write("| Image | CVE | Package | Decision | Expires |\n|---|---|---|---|---|\n")
             for row in rows:
                 summary.write("| " + " | ".join(row) + " |\n")
-            summary.write(f"\nBlocked: **{blocked}** · Temporary exceptions: **{excepted}**\n")
+            summary.write(f"\nBlocked: **{len(blocked)}** · Temporary exceptions: **{excepted}**\n")
 
-    print(f"Blocked findings: {blocked}; active temporary exceptions: {excepted}")
+    print(f"Blocked findings: {len(blocked)}; active temporary exceptions: {excepted}")
     return 1 if blocked else 0
 
 
