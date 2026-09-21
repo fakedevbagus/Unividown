@@ -1,6 +1,6 @@
 # Unividown Project Status
 
-Last updated: 2026-09-21 19:00 Asia/Jakarta  
+Last updated: 2026-09-21 22:35 Asia/Jakarta  
 Active branch: `chore/security-dependency-upgrades`  
 Baseline main: `2060d00e5366e672fcbaf98d00f79266b45abd7c`
 
@@ -9,7 +9,8 @@ Baseline main: `2060d00e5366e672fcbaf98d00f79266b45abd7c`
 | Phase | Status | Gate |
 | --- | --- | --- |
 | 0 — baseline, guardrails, docs | Complete in review branch | Documentation and PR evidence prepared |
-| 1 — startup, Docker, CI, Socket.IO, metrics | Implemented; security triage pending | Runtime, Docker images, and full Compose smoke pass; worker-image Trivy findings remain open |
+| 1 — startup, Docker, CI, Socket.IO, metrics | Complete in security-upgrade review branch | Runtime, Docker/Compose, tests, and security policy are green |
+| Security dependency upgrade | Complete in draft PR #2 | Framework/runtime upgrades and image scans pass |
 | 2 — download lifecycle | Deferred | Route conflict and Redis failure semantics intentionally unchanged |
 | 3–7 | Deferred | Not started |
 
@@ -18,16 +19,17 @@ Baseline main: `2060d00e5366e672fcbaf98d00f79266b45abd7c`
 | Area | Status | Evidence / note |
 | --- | --- | --- |
 | Web lint | Working with known warnings | Two pre-existing image `alt` warnings |
-| Web typecheck | Working | `tsc --noEmit` added and passed |
-| Web production build | Working | Next.js build passed; metadata warnings remain |
-| Worker unit/API tests | Working | 10 passed on Python 3.13 validation host; CI targets Python 3.11 |
-| FastAPI liveness | Working | `/api/health/live` regression test passed |
-| Dependency readiness | Working | Required failure returns 503; Redis can be optional for local/test |
-| Prometheus metrics | Working | Imports fixed, request wiring added, format regression test passed |
-| Socket.IO runtime | Working in test | ASGI polling handshake against `sio_app` passed |
-| Docker images | Working in CI | Worker core and web production images built successfully on PR #1 |
-| Docker Compose runtime | Working in CI | Dev/production config and full Redis/worker/web development smoke passed |
-| Core worker without Whisper | Working in test | Whisper removed from core requirements; unavailable endpoint returns 503 |
+| Web typecheck | Working | Deterministic clean typecheck passed |
+| Web production build | Working | Next.js 15.5.24 + React 19.2.0 build passed |
+| Worker unit/API tests | Working | 10 tests passed in CI on Python 3.11 |
+| FastAPI liveness | Working | `/api/health/live` regression and Compose smoke passed |
+| Dependency readiness | Working | Required failure returns 503; healthy Compose readiness returns 200 |
+| Prometheus metrics | Working | Format and runtime smoke passed |
+| Socket.IO runtime | Working | Polling handshake passed in tests and Compose smoke |
+| Docker images | Working in CI | Worker core and standalone web production images build successfully |
+| Docker Compose runtime | Working in CI | Dev/production config and full Redis/worker/web smoke passed |
+| Image security policy | Working | Filesystem and image scans pass; expiring worker OS exception is enforced |
+| Core worker without Whisper | Working | Core image starts without Whisper; unavailable endpoint returns 503 |
 | Download create without Redis | Broken / Phase 2 | Existing enqueue transaction/fallback behavior is unchanged |
 | `/api/downloads/info` | Broken / Phase 2 | Existing route-order conflict is unchanged |
 | Processing results UI | Deferred | Phase 3–4 |
@@ -36,24 +38,28 @@ Baseline main: `2060d00e5366e672fcbaf98d00f79266b45abd7c`
 
 - Docker deployments require Redis (`REDIS_REQUIRED=true`); local/test may run with degraded optional Redis readiness.
 - Runtime entrypoint is `app.main:sio_app` so FastAPI and Socket.IO share one ASGI server.
-- Node 20, pnpm 9.15.5, Python 3.11, FFmpeg 6+, and Redis 7 are the supported baseline.
-- Whisper is an optional AI dependency in `requirements-ai.txt`; the core image does not install it.
+- Node 20, pnpm 9.15.5, Python 3.11, FFmpeg, and Redis 7 are the supported baseline.
+- Web runtime uses Next standalone output and excludes npm, pnpm, Corepack, dev dependencies, and workspace build tooling.
+- Worker runtime removes pip/setuptools/wheel build tooling after dependency installation.
+- Whisper is optional and excluded from the core worker image.
+- Unfixed Debian worker OS findings have an explicit exception expiring 2026-10-21; fixed OS findings, language packages, and web findings remain blocking.
 - Production remains Docker Compose on a VPS; deployment automation is intentionally disabled until credentials and rollback procedures exist.
 
 ## Latest verification
 
 | Command/check | Result |
 | --- | --- |
-| `pnpm install --frozen-lockfile` | Passed with pinned pnpm; validation host uses unsupported Node 24 warning |
-| Web lint | Passed with 2 pre-existing warnings |
+| Frozen pnpm install | Passed |
+| Web lint | Passed with 2 pre-existing accessibility warnings |
 | Web typecheck | Passed |
-| Web build | Passed with pre-existing metadata warnings |
-| `pytest -q` | 10 passed, 59 deprecation warnings |
-| Liveness/readiness/metrics/Socket.IO regression tests | Passed |
-| Compose YAML parse | Passed for dev and production |
-| Worker/web Docker image builds | Passed in GitHub Actions |
-| Trivy image scan | Executed against transferred worker image; failed on HIGH/CRITICAL findings pending triage |
-| `docker compose config` / compose smoke | Passed in GitHub Actions |
+| Next.js 15.5.24 production build | Passed |
+| Backend pytest | 10 passed |
+| Worker/web Docker image builds | Passed |
+| Dev and production Compose config | Passed |
+| Full development Compose smoke | Passed |
+| Liveness/readiness/metrics/Socket.IO/web HTTP | Passed |
+| Trivy filesystem scan | Passed |
+| Worker/web image security policy | Passed |
 
 ## Known issues
 
@@ -65,18 +71,9 @@ Baseline main: `2060d00e5366e672fcbaf98d00f79266b45abd7c`
 
 ### Quality debt
 
-- Pydantic class config, `datetime.utcnow()`, TestClient/httpx, Next.js metadata, and two image accessibility warnings emit deprecations/warnings.
-- Docker runner startup is corrected structurally but still requires execution in CI or a Docker-capable host.
+- Pydantic class config, `datetime.utcnow()`, TestClient/httpx, Next.js metadata, and two image accessibility warnings remain.
+- Temporary worker OS security exception must be reviewed before 2026-10-21.
 
 ## Next exact step
 
-Triage the worker-image HIGH/CRITICAL Trivy findings without suppressing them, apply only safe Phase 1-compatible base-image or patch/minor dependency fixes, and rerun both worker and web image scans. Keep PR #1 draft and do not start Phase 2 until the security job is green and the Phase 1 gate is approved.
-
-
-## Security dependency upgrade
-
-- Draft PR: #2, temporarily based on `main` so full CI runs against the cumulative candidate.
-- Next.js 15.5.24, React 19.2.0, matching React types, Next ESLint config, and PostCSS are applied.
-- Web production image uses standalone output and excludes pnpm/dev dependencies from runtime.
-- Local frozen install, lint, typecheck, and production build pass.
-- Next gate: worker tests, Docker builds, Compose smoke, and Trivy image policy in GitHub Actions.
+Review draft PR #2 and merge only after explicit user approval. After the cumulative security-upgrade candidate is merged, create a fresh Phase 2 branch from updated `main`; do not begin Phase 2 on an unmerged stack.
