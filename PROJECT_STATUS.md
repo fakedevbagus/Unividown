@@ -1,7 +1,7 @@
 # Unividown Project Status
 
-Last updated: 2026-09-21 22:35 Asia/Jakarta  
-Active branch: `chore/security-dependency-upgrades`  
+Last updated: 2026-09-21 22:35 Asia/Jakarta
+Active branch: `fix/download-info-and-queue-reliability`
 Baseline main: `2060d00e5366e672fcbaf98d00f79266b45abd7c`
 
 ## Phase status
@@ -11,7 +11,7 @@ Baseline main: `2060d00e5366e672fcbaf98d00f79266b45abd7c`
 | 0 — baseline, guardrails, docs | Complete in review branch | Documentation and PR evidence prepared |
 | 1 — startup, Docker, CI, Socket.IO, metrics | Complete in security-upgrade review branch | Runtime, Docker/Compose, tests, and security policy are green |
 | Security dependency upgrade | Complete in draft PR #2 | Framework/runtime upgrades and image scans pass |
-| 2 — download lifecycle | Deferred | Route conflict and Redis failure semantics intentionally unchanged |
+| 2 — download lifecycle | In progress | Route info and queue reliability implemented; result serving/cancel lifecycle remain next |
 | 3–7 | Deferred | Not started |
 
 ## Feature matrix
@@ -30,8 +30,8 @@ Baseline main: `2060d00e5366e672fcbaf98d00f79266b45abd7c`
 | Docker Compose runtime | Working in CI | Dev/production config and full Redis/worker/web smoke passed |
 | Image security policy | Working | Filesystem and image scans pass; expiring worker OS exception is enforced |
 | Core worker without Whisper | Working | Core image starts without Whisper; unavailable endpoint returns 503 |
-| Download create without Redis | Broken / Phase 2 | Existing enqueue transaction/fallback behavior is unchanged |
-| `/api/downloads/info` | Broken / Phase 2 | Existing route-order conflict is unchanged |
+| Download create without Redis | Working in local/test mode | Optional Redis returns database fallback; required failure returns 503 without orphan jobs |
+| `/api/downloads/info` | Working in regression test | Static route is registered before `/{job_id}` |
 | Processing results UI | Deferred | Phase 3–4 |
 
 ## Architecture decisions
@@ -76,4 +76,12 @@ Baseline main: `2060d00e5366e672fcbaf98d00f79266b45abd7c`
 
 ## Next exact step
 
-Review draft PR #2 and merge only after explicit user approval. After the cumulative security-upgrade candidate is merged, create a fresh Phase 2 branch from updated `main`; do not begin Phase 2 on an unmerged stack.
+Review the first Phase 2 PR for route/queue reliability. After CI is green, merge only with explicit approval, then continue result serving and real cancellation in a separate PR.
+
+
+## Phase 2 implementation evidence
+
+- Branch: `fix/download-info-and-queue-reliability`.
+- Backend regression suite: 17 passed.
+- Implemented static info-route ordering, optional database fallback, required Redis 503 cleanup, transactional batch enqueue, priority/FIFO scoring, queue removal on pending cancellation, and idempotent retry.
+- Intentionally deferred: secure result-serving endpoint, process-level cancellation, downloaded-file upsert, restart recovery, and frontend polling fallback.

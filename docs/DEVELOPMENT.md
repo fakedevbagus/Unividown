@@ -124,3 +124,9 @@ Never commit `.env`, media, SQLite databases, data directories, virtual environm
 ## Updating project logs
 
 After every implementation session update `PROJECT_STATUS.md`, `CHANGELOG.md`, and this guide when commands/config change. Record date, branch/PR, changed files and architecture decisions, exact test results, new risks, gate status, next exact step, and the next-chat handoff prompt. Mirror the same concise evidence in the Notion recovery log.
+
+## Download queue modes
+
+Docker sets `REDIS_REQUIRED=true`. A failed enqueue returns HTTP 503 and the API removes the just-created database record so no orphan job remains.
+
+Local/test mode may set `REDIS_REQUIRED=false`. When Redis is unavailable, create/batch/retry responses use `queue_backend: "database"`; the worker discovers pending records through the database fallback. Tests must mock Redis or use an explicit service and must cover both modes.

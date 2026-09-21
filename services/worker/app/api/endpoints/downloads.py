@@ -1,12 +1,14 @@
-from typing import Optional, List
+from typing import List, Optional
+
 from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import BaseModel, HttpUrl
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
+
 from app.database import get_db
 from app.models.download_job import DownloadJob
 from app.models.downloaded_file import DownloadedFile
+from app.queue.redis_queue import QueueUnavailable, queue
 from app.services.downloader import Downloader
-from app.queue.redis_queue import queue
 
 router = APIRouter(prefix="/downloads", tags=["downloads"])
 downloader_service = Downloader()
@@ -27,11 +29,65 @@ class URLInfoRequest(BaseModel):
     url: str
 
 
+def _resolve_info_url(url: Optional[str], payload: Optional[URLInfoRequest]):
+    if url:
+        return url
+    if payload and payload.url:
+        return payload.url
+    raise HTTPException(status_code=400, detail="URL is required")
+
+
+def _format_info(target_url: str):
+    try:
+        info = downloader_service.get_info(target_url)
+        if info.get("type") == "playlist":
+            return info
+        return {
+            "type": "video",
+            "title": info.get("title"),
+            "thumbnail": info.get("thumbnail"),
+            "duration": info.get("duration"),
+            "uploader": info.get("uploader"),
+            "extractor": info.get("extractor"),
+        }
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+# Static routes must be registered before /{job_id}.
+@router.post("/info")
+def extract_url_info_post(payload: URLInfoRequest):
+    return _format_info(_resolve_info_url(None, payload))
+
+
+@router.get("/info")
+def extract_url_info_get(url: str = Query(..., description="Target URL")):
+    return _format_info(_resolve_info_url(url, None))
+
+
+def _delete_jobs(db: Session, jobs: List[DownloadJob]):
+    ids = [job.id for job in jobs if job.id is not None]
+    if ids:
+        db.query(DownloadJob).filter(DownloadJob.id.in_(ids)).delete(
+            synchronize_session=False
+        )
+        db.commit()
+
+
+def _enqueue_jobs(db: Session, jobs: List[DownloadJob]) -> bool:
+    entries = [(job.id, job.priority or 0) for job in jobs]
+    try:
+        return queue.push_jobs(entries)
+    except QueueUnavailable as exc:
+        _delete_jobs(db, jobs)
+        raise HTTPException(
+            status_code=503,
+            detail="Download queue unavailable; no jobs were created",
+        ) from exc
+
+
 @router.post("")
-def create_download(
-    payload: CreateDownloadRequest,
-    db: Session = Depends(get_db),
-):
+def create_download(payload: CreateDownloadRequest, db: Session = Depends(get_db)):
     if not payload.url or not payload.url.strip():
         raise HTTPException(status_code=400, detail="URL is required")
 
@@ -46,17 +102,17 @@ def create_download(
     db.commit()
     db.refresh(job)
 
-    # Push to Redis queue with priority
-    queue.push_job(job.id, priority=job.priority)
-
-    return {"job_id": job.id, "status": "queued", "job": job.to_dict()}
+    queued_in_redis = _enqueue_jobs(db, [job])
+    return {
+        "job_id": job.id,
+        "status": "queued",
+        "queue_backend": "redis" if queued_in_redis else "database",
+        "job": job.to_dict(),
+    }
 
 
 @router.post("/batch")
-def create_batch_download(
-    payload: BatchDownloadRequest,
-    db: Session = Depends(get_db),
-):
+def create_batch_download(payload: BatchDownloadRequest, db: Session = Depends(get_db)):
     if not payload.urls:
         raise HTTPException(status_code=400, detail="URLs required, max 50")
     if len(payload.urls) > 50:
@@ -76,17 +132,18 @@ def create_batch_download(
         db.add(job)
         jobs.append(job)
 
+    if not jobs:
+        raise HTTPException(status_code=400, detail="At least one valid URL is required")
+
     db.commit()
     for job in jobs:
         db.refresh(job)
 
-    # Push all jobs to Redis queue
-    for job in jobs:
-        queue.push_job(job.id, priority=job.priority)
-
+    queued_in_redis = _enqueue_jobs(db, jobs)
     return {
         "message": f"Created {len(jobs)} download jobs",
-        "job_ids": [j.id for j in jobs],
+        "job_ids": [job.id for job in jobs],
+        "queue_backend": "redis" if queued_in_redis else "database",
     }
 
 
@@ -112,7 +169,7 @@ def get_download(job_id: int, db: Session = Depends(get_db)):
 
     files = db.query(DownloadedFile).filter_by(job_id=job_id).all()
     data = job.to_dict()
-    data["files"] = [f.to_dict() for f in files]
+    data["files"] = [file.to_dict() for file in files]
     return data
 
 
@@ -125,13 +182,16 @@ def cancel_or_delete_download(job_id: int, db: Session = Depends(get_db)):
     if job.status in ["pending", "processing"]:
         job.status = "cancelled"
         db.commit()
+        try:
+            queue.remove_jobs([job_id])
+        except QueueUnavailable:
+            pass
         return {"success": True, "message": "Job cancelled", "job": job.to_dict()}
-    else:
-        # Delete job and files record
-        db.query(DownloadedFile).filter_by(job_id=job_id).delete()
-        db.delete(job)
-        db.commit()
-        return {"success": True, "message": "Job deleted"}
+
+    db.query(DownloadedFile).filter_by(job_id=job_id).delete()
+    db.delete(job)
+    db.commit()
+    return {"success": True, "message": "Job deleted"}
 
 
 @router.post("/{job_id}/retry")
@@ -140,6 +200,20 @@ def retry_download(job_id: int, db: Session = Depends(get_db)):
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
 
+    if job.status in ["pending", "processing"]:
+        return {
+            "success": True,
+            "message": "Job is already queued or processing",
+            "queue_backend": "existing",
+            "job": job.to_dict(),
+        }
+
+    previous = {
+        "status": job.status,
+        "progress": job.progress,
+        "error_message": job.error_message,
+        "retry_count": job.retry_count,
+    }
     job.status = "pending"
     job.progress = 0.0
     job.error_message = None
@@ -147,53 +221,19 @@ def retry_download(job_id: int, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(job)
 
-    # Push to Redis queue for retry
-    queue.push_job(job.id, priority=job.priority)
-
-    return {"success": True, "message": "Job queued for retry", "job": job.to_dict()}
-
-
-def _resolve_info_url(url: Optional[str], payload: Optional[URLInfoRequest]):
-    if url:
-        return url
-    if payload and payload.url:
-        return payload.url
-    raise HTTPException(status_code=400, detail="URL is required")
-
-
-@router.post("/info")
-def extract_url_info_post(payload: URLInfoRequest):
-    target_url = _resolve_info_url(None, payload)
     try:
-        info = downloader_service.get_info(target_url)
-        if info.get('type') == 'playlist':
-            return info
-        return {
-            "type": "video",
-            "title": info.get("title"),
-            "thumbnail": info.get("thumbnail"),
-            "duration": info.get("duration"),
-            "uploader": info.get("uploader"),
-            "extractor": info.get("extractor"),
-        }
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        queued_in_redis = queue.push_jobs([(job.id, job.priority or 0)])
+    except QueueUnavailable as exc:
+        job.status = previous["status"]
+        job.progress = previous["progress"]
+        job.error_message = previous["error_message"]
+        job.retry_count = previous["retry_count"]
+        db.commit()
+        raise HTTPException(status_code=503, detail="Download queue unavailable") from exc
 
-
-@router.get("/info")
-def extract_url_info_get(url: str = Query(..., description="Target URL")):
-    target_url = _resolve_info_url(url, None)
-    try:
-        info = downloader_service.get_info(target_url)
-        if info.get('type') == 'playlist':
-            return info
-        return {
-            "type": "video",
-            "title": info.get("title"),
-            "thumbnail": info.get("thumbnail"),
-            "duration": info.get("duration"),
-            "uploader": info.get("uploader"),
-            "extractor": info.get("extractor"),
-        }
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+    return {
+        "success": True,
+        "message": "Job queued for retry",
+        "queue_backend": "redis" if queued_in_redis else "database",
+        "job": job.to_dict(),
+    }

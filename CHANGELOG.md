@@ -41,3 +41,12 @@ All notable changes to Unividown are documented here.
 - Updated React types, Next ESLint configuration, and PostCSS to patched versions.
 - Converted the production web image to Next standalone output so build tooling, pnpm, and dev dependencies are excluded from runtime.
 - Added Alpine package upgrades to the web base and upgraded Python packaging tools in the worker image.
+
+### Phase 2 — download queue reliability (in review)
+
+- Registered `/api/downloads/info` before the dynamic job route so metadata requests are no longer parsed as job IDs.
+- Added transactional multi-job Redis enqueue, deterministic priority/FIFO scoring, and explicit required-Redis failures.
+- Added database fallback when Redis is optional, with API responses identifying the active queue backend.
+- Prevented orphan database jobs when required enqueue fails.
+- Made retry idempotent for jobs already pending/processing and restored prior state when required re-enqueue fails.
+- Added regression coverage for route order, fallback, required failure, orphan prevention, priority semantics, and retry idempotency.
