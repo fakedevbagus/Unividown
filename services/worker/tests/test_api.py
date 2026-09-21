@@ -18,7 +18,7 @@ def test_status_endpoint():
 
 def test_create_and_list_downloads(monkeypatch):
     # Queue reliability is Phase 2; isolate this API test from external Redis.
-    monkeypatch.setattr(queue, "push_job", lambda *args, **kwargs: None)
+    monkeypatch.setattr(queue, "push_jobs", lambda *args, **kwargs: False)
     with TestClient(app) as client:
         # Create job
         create_res = client.post("/api/downloads", json={"url": "https://example.com/video", "quality": "720"})
