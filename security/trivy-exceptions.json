@@ -1,45 +1,11 @@
 {
-  "exceptions": [
-    {"id":"CVE-2026-75146","image":"worker","package":"ffmpeg","expires":"2026-10-21","reason":"Unfixed required FFmpeg runtime."},
-    {"id":"CVE-2026-75144","image":"worker","package":"ffmpeg","expires":"2026-10-21","reason":"Unfixed required FFmpeg runtime."},
-    {"id":"CVE-2026-75143","image":"worker","package":"ffmpeg","expires":"2026-10-21","reason":"Unfixed required FFmpeg runtime."},
-    {"id":"CVE-2026-75142","image":"worker","package":"ffmpeg","expires":"2026-10-21","reason":"Unfixed required FFmpeg runtime."},
-    {"id":"CVE-2026-70632","image":"worker","package":"ffmpeg","expires":"2026-10-21","reason":"Unfixed required FFmpeg runtime."},
-    {"id":"CVE-2026-70628","image":"worker","package":"ffmpeg","expires":"2026-10-21","reason":"Unfixed required FFmpeg runtime."},
-    {"id":"CVE-2026-66040","image":"worker","package":"ffmpeg","expires":"2026-10-21","reason":"Unfixed required FFmpeg runtime."},
-    {"id":"CVE-2026-66039","image":"worker","package":"ffmpeg","expires":"2026-10-21","reason":"Unfixed required FFmpeg runtime."},
-    {"id":"CVE-2026-66036","image":"worker","package":"ffmpeg","expires":"2026-10-21","reason":"Unfixed required FFmpeg runtime."},
-    {"id":"CVE-2026-64835","image":"worker","package":"ffmpeg","expires":"2026-10-21","reason":"Unfixed required FFmpeg runtime."},
-    {"id":"CVE-2026-64834","image":"worker","package":"ffmpeg","expires":"2026-10-21","reason":"Unfixed required FFmpeg runtime."},
-    {"id":"CVE-2026-64833","image":"worker","package":"ffmpeg","expires":"2026-10-21","reason":"Unfixed required FFmpeg runtime."},
-    {"id":"CVE-2026-64832","image":"worker","package":"ffmpeg","expires":"2026-10-21","reason":"Unfixed required FFmpeg runtime."},
-    {"id":"CVE-2026-64830","image":"worker","package":"ffmpeg","expires":"2026-10-21","reason":"Unfixed required FFmpeg runtime."},
-    {"id":"CVE-2026-58049","image":"worker","package":"ffmpeg","expires":"2026-10-21","reason":"Unfixed required FFmpeg runtime."},
-    {"id":"CVE-2026-8461","image":"worker","package":"ffmpeg","expires":"2026-10-21","reason":"Unfixed required FFmpeg runtime."},
-    {"id":"CVE-2026-75146","image":"worker","package":"libav*","expires":"2026-10-21","reason":"Unfixed library installed by required FFmpeg runtime."},
-    {"id":"CVE-2026-75144","image":"worker","package":"libav*","expires":"2026-10-21","reason":"Unfixed library installed by required FFmpeg runtime."},
-    {"id":"CVE-2026-75143","image":"worker","package":"libav*","expires":"2026-10-21","reason":"Unfixed library installed by required FFmpeg runtime."},
-    {"id":"CVE-2026-75142","image":"worker","package":"libav*","expires":"2026-10-21","reason":"Unfixed library installed by required FFmpeg runtime."},
-    {"id":"CVE-2026-70632","image":"worker","package":"libav*","expires":"2026-10-21","reason":"Unfixed library installed by required FFmpeg runtime."},
-    {"id":"CVE-2026-70628","image":"worker","package":"libav*","expires":"2026-10-21","reason":"Unfixed library installed by required FFmpeg runtime."},
-    {"id":"CVE-2026-66040","image":"worker","package":"libav*","expires":"2026-10-21","reason":"Unfixed library installed by required FFmpeg runtime."},
-    {"id":"CVE-2026-66039","image":"worker","package":"libav*","expires":"2026-10-21","reason":"Unfixed library installed by required FFmpeg runtime."},
-    {"id":"CVE-2026-66036","image":"worker","package":"libav*","expires":"2026-10-21","reason":"Unfixed library installed by required FFmpeg runtime."},
-    {"id":"CVE-2026-64835","image":"worker","package":"libav*","expires":"2026-10-21","reason":"Unfixed library installed by required FFmpeg runtime."},
-    {"id":"CVE-2026-64834","image":"worker","package":"libav*","expires":"2026-10-21","reason":"Unfixed library installed by required FFmpeg runtime."},
-    {"id":"CVE-2026-64833","image":"worker","package":"libav*","expires":"2026-10-21","reason":"Unfixed library installed by required FFmpeg runtime."},
-    {"id":"CVE-2026-64832","image":"worker","package":"libav*","expires":"2026-10-21","reason":"Unfixed library installed by required FFmpeg runtime."},
-    {"id":"CVE-2026-64830","image":"worker","package":"libav*","expires":"2026-10-21","reason":"Unfixed library installed by required FFmpeg runtime."},
-    {"id":"CVE-2026-58049","image":"worker","package":"libav*","expires":"2026-10-21","reason":"Unfixed library installed by required FFmpeg runtime."},
-    {"id":"CVE-2026-8461","image":"worker","package":"libav*","expires":"2026-10-21","reason":"Unfixed library installed by required FFmpeg runtime."},
-    {"id":"CVE-2023-39616","image":"worker","package":"libaom3","expires":"2026-10-21","reason":"Unfixed codec library installed by required FFmpeg runtime."},
-    {"id":"CVE-2023-6879","image":"worker","package":"libaom3","expires":"2026-10-21","reason":"Unfixed codec library installed by required FFmpeg runtime."},
-    {"id":"CVE-2026-54369","image":"worker","package":"libacl1","expires":"2026-10-21","reason":"Unfixed Debian base runtime package."},
-    {"id":"CVE-2026-41992","image":"worker","package":"gzip","expires":"2026-10-21","reason":"Unfixed Debian base runtime package."},
-    {"id":"CVE-2026-78410","image":"worker","package":"bsdutils","expires":"2026-10-21","reason":"Unfixed Debian base runtime package."},
-    {"id":"CVE-2026-78409","image":"worker","package":"bsdutils","expires":"2026-10-21","reason":"Unfixed Debian base runtime package."},
-    {"id":"CVE-2026-78408","image":"worker","package":"bsdutils","expires":"2026-10-21","reason":"Unfixed Debian base runtime package."},
-    {"id":"CVE-2026-76642","image":"worker","package":"bsdutils","expires":"2026-10-21","reason":"Unfixed Debian base runtime package."},
-    {"id":"CVE-2026-53613","image":"worker","package":"bsdutils","expires":"2026-10-21","reason":"Unfixed Debian base runtime package."}
+  "exceptions": [],
+  "unfixed_os_package_exceptions": [
+    {
+      "image": "worker",
+      "package": "*",
+      "expires": "2026-10-21",
+      "reason": "Temporary user-approved exception for Debian Bookworm OS packages that Trivy reports without any fixed version. Fixed OS findings, application dependencies, and all web-image findings remain blocking."
+    }
   ]
 }
