@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import fnmatch
 import json
 import os
 import sys
@@ -20,16 +21,19 @@ def load_findings(path: Path):
                 yield vulnerability
 
 
+def find_exception(exceptions, image: str, package: str, vuln_id: str):
+    for item in exceptions:
+        if item["image"] == image and item["id"] == vuln_id and fnmatch.fnmatchcase(package, item["package"]):
+            return item
+    return None
+
+
 def main() -> int:
     if len(sys.argv) < 3:
         raise SystemExit("usage: enforce_trivy_policy.py POLICY IMAGE=REPORT [IMAGE=REPORT ...]")
 
-    policy_path = Path(sys.argv[1])
-    policy = json.loads(policy_path.read_text(encoding="utf-8"))
-    exceptions = {
-        (item["image"], item["package"], item["id"]): item
-        for item in policy.get("exceptions", [])
-    }
+    policy = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+    exceptions = policy.get("exceptions", [])
     today = date.today()
     blocked = 0
     excepted = 0
@@ -42,7 +46,7 @@ def main() -> int:
             package = finding["PkgName"]
             installed = finding.get("InstalledVersion", "unknown")
             fixed = finding.get("FixedVersion") or "unfixed"
-            exception = exceptions.get((image, package, vuln_id))
+            exception = find_exception(exceptions, image, package, vuln_id)
             title = f"Trivy {image} {finding['Severity']} {vuln_id}"
             detail = f"package={package} installed={installed} fixed={fixed}"
 
