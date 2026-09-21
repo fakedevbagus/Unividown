@@ -1,6 +1,45 @@
-version: '3.8'
-
 services:
+  redis:
+    image: redis:7-alpine
+    command: redis-server --appendonly yes
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-dev-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  worker:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.worker
+    command: uvicorn app.main:sio_app --reload --host 0.0.0.0 --port 8000
+    ports:
+      - "8000:8000"
+    environment:
+      PYTHON_ENV: development
+      DATABASE_URL: sqlite:////app/data/unividown.db
+      UPLOAD_DIR: /app/data/uploads
+      DOWNLOAD_DIR: /app/data/downloads
+      PROCESSED_DIR: /app/data/processed
+      REDIS_URL: redis://redis:6379/0
+      REDIS_REQUIRED: "true"
+    volumes:
+      - ./services/worker:/app
+      - ./data:/app/data
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8000/api/health/ready"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+      start_period: 15s
+
   web:
     build:
       context: .
@@ -9,28 +48,21 @@ services:
     ports:
       - "3000:3000"
     environment:
-      - NODE_ENV=development
-      - WORKER_URL=http://worker:8000
+      NODE_ENV: development
+      WORKER_URL: http://worker:8000
     volumes:
       - ./apps/web:/app/apps/web
       - ./packages/shared:/app/packages/shared
       - /app/apps/web/node_modules
     depends_on:
-      - worker
+      worker:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:3000').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
 
-  worker:
-    build:
-      context: .
-      dockerfile: docker/Dockerfile.worker
-    command: uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
-    ports:
-      - "8000:8000"
-    environment:
-      - PYTHON_ENV=development
-      - DATABASE_URL=sqlite:////app/data/unividown.db
-      - UPLOAD_DIR=/app/data/uploads
-      - DOWNLOAD_DIR=/app/data/downloads
-      - PROCESSED_DIR=/app/data/processed
-    volumes:
-      - ./services/worker:/app
-      - ./data:/app/data
+volumes:
+  redis-dev-data:

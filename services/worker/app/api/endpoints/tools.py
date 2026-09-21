@@ -1,3 +1,4 @@
+import importlib.util
 import json
 import os
 import shutil
@@ -220,7 +221,12 @@ async def transcribe_media(
     model: str = Form("tiny"),
     db: Session = Depends(get_db),
 ):
-    """Transcribe audio/video to text using Whisper"""
+    """Transcribe audio/video to text using the optional Whisper profile."""
+    if importlib.util.find_spec("whisper") is None:
+        raise HTTPException(
+            status_code=503,
+            detail="Transcription capability unavailable. Install the optional AI profile.",
+        )
     saved_path = await save_upload(file)
     job = ProcessingJob(
         tool_type="transcribe",
