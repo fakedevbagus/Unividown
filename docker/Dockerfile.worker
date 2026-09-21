@@ -10,9 +10,11 @@ RUN pip install --no-cache-dir --upgrade pip && \
     if [ "$INSTALL_AI" = "true" ]; then pip install --no-cache-dir -r requirements-ai.txt; fi && \
     pip uninstall -y msgpack setuptools wheel jaraco.context && \
     pip install --no-cache-dir msgpack==1.2.2 && \
+    python -m pip uninstall -y pip && \
     rm -rf /usr/local/lib/python3.11/site-packages/setuptools* \
            /usr/local/lib/python3.11/site-packages/wheel* \
            /usr/local/lib/python3.11/site-packages/jaraco/context* \
+           /usr/local/lib/python3.11/ensurepip \
            /root/.cache
 COPY services/worker /app
 ENV PYTHONUNBUFFERED=1 DATABASE_URL="sqlite:////app/data/unividown.db" UPLOAD_DIR="/app/data/uploads" DOWNLOAD_DIR="/app/data/downloads" PROCESSED_DIR="/app/data/processed"
