@@ -50,3 +50,11 @@ All notable changes to Unividown are documented here.
 - Prevented orphan database jobs when required enqueue fails.
 - Made retry idempotent for jobs already pending/processing and restored prior state when required re-enqueue fails.
 - Added regression coverage for route order, fallback, required failure, orphan prevention, priority semantics, and retry idempotency.
+
+### Phase 2 — result serving and job lifecycle
+
+- Added result metadata and a download endpoint constrained to each job's configured download directory.
+- Added result download actions to completed jobs in the web UI.
+- Added cooperative cancellation for active yt-dlp jobs and retained pending queue removal.
+- Added startup recovery for jobs interrupted while processing.
+- Changed downloaded-file persistence to update existing records instead of duplicating them on retry.

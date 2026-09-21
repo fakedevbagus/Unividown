@@ -1,6 +1,4 @@
 import asyncio
-import os
-import re
 from pathlib import Path
 from typing import Optional, Any
 from app.services.downloader import Downloader, clean_ansi
@@ -8,6 +6,27 @@ from app.database import SessionLocal
 from app.models.download_job import DownloadJob
 from app.models.downloaded_file import DownloadedFile
 from app.queue.redis_queue import queue
+from app.workers.cancellation import cancellation_registry
+
+
+class DownloadCancelled(RuntimeError):
+    pass
+
+
+def recover_interrupted_downloads(db) -> int:
+    """Return jobs left processing by a prior process to the pending queue."""
+    jobs = db.query(DownloadJob).filter_by(status="processing").all()
+    if not jobs:
+        return 0
+
+    for job in jobs:
+        job.status = "pending"
+        job.error_message = "Recovered after worker restart"
+        cancellation_registry.clear(job.id)
+    db.commit()
+    queue.remove_jobs([job.id for job in jobs])
+    queue.push_jobs([(job.id, job.priority or 0) for job in jobs])
+    return len(jobs)
 
 
 class DownloadWorker:
@@ -52,6 +71,7 @@ class DownloadWorker:
                     )
 
                 if job:
+                    cancellation_registry.clear(job.id)
                     queue.mark_processing(job.id)
                     job.status = "processing"
                     db.commit()
@@ -73,6 +93,12 @@ class DownloadWorker:
                             success = True
                             break
                         except Exception as e:
+                            if cancellation_registry.is_requested(job.id):
+                                last_error = DownloadCancelled("Download cancelled")
+                                job.status = "cancelled"
+                                job.error_message = None
+                                db.commit()
+                                break
                             last_error = e
                             print(f"[DownloadWorker] Job {job.id} attempt {attempt + 1} failed: {e}")
                             job.retry_count = attempt + 1
@@ -81,7 +107,16 @@ class DownloadWorker:
                             if attempt < max_retries:
                                 await asyncio.sleep(2 ** attempt)
                     queue.unmark_processing(job.id)
-                    if not success:
+                    if cancellation_registry.is_requested(job.id):
+                        job.status = "cancelled"
+                        job.error_message = None
+                        db.commit()
+                        await self.emit_event(
+                            "download:status",
+                            {"jobId": job.id, "status": "cancelled"},
+                            room=f"job:{job.id}",
+                        )
+                    elif not success:
                         job.status = "failed"
                         job.error_message = str(last_error) if last_error else "Unknown error"
                         db.commit()
@@ -90,6 +125,7 @@ class DownloadWorker:
                             {"jobId": job.id, "error": str(last_error)},
                             room=f"job:{job.id}"
                         )
+                    cancellation_registry.clear(job.id)
             except Exception as loop_err:
                 print(f"[DownloadWorker] Queue loop error: {loop_err}")
             finally:
@@ -101,6 +137,8 @@ class DownloadWorker:
         loop = asyncio.get_running_loop()
 
         def progress_hook(d):
+            if cancellation_registry.is_requested(job.id):
+                raise DownloadCancelled("Download cancelled")
             if d.get('status') == 'downloading':
                 raw_pct = d.get('_percent_str', '0%')
                 clean_pct = clean_ansi(raw_pct).replace('%', '')
@@ -141,6 +179,8 @@ class DownloadWorker:
             )
 
         info = await loop.run_in_executor(None, do_download)
+        if cancellation_registry.is_requested(job.id):
+            raise DownloadCancelled("Download cancelled")
 
         # Update metadata
         if info:
@@ -162,14 +202,21 @@ class DownloadWorker:
                     elif ext in ["vtt", "srt", "ass"]:
                         file_type = "subtitle"
 
-                    saved_file = DownloadedFile(
-                        job_id=job.id,
-                        filename=f.name,
-                        file_path=str(f.resolve()),
-                        file_type=file_type,
-                        file_size=f.stat().st_size,
+                    resolved_path = str(f.resolve())
+                    saved_file = (
+                        db.query(DownloadedFile)
+                        .filter_by(job_id=job.id, file_path=resolved_path)
+                        .first()
                     )
-                    db.add(saved_file)
+                    if saved_file is None:
+                        saved_file = DownloadedFile(
+                            job_id=job.id,
+                            file_path=resolved_path,
+                        )
+                        db.add(saved_file)
+                    saved_file.filename = f.name
+                    saved_file.file_type = file_type
+                    saved_file.file_size = f.stat().st_size
 
         job.progress = 100.0
         job.status = "completed"

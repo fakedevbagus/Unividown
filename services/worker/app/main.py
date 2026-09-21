@@ -8,10 +8,10 @@ from fastapi.middleware.cors import CORSMiddleware
 import socketio
 
 from app.config import settings
-from app.database import Base, engine
+from app.database import Base, SessionLocal, engine
 from app.api.endpoints.downloads import router as downloads_router
 from app.api.endpoints.tools import router as tools_router
-from app.workers.download_worker import DownloadWorker
+from app.workers.download_worker import DownloadWorker, recover_interrupted_downloads
 from app.workers.process_worker import ProcessWorker
 from app.middleware.rate_limit import RateLimitMiddleware
 from app.utils.health import build_readiness_report
@@ -60,6 +60,14 @@ async def lifespan(app: FastAPI):
     # Startup: Create tables
     Base.metadata.create_all(bind=engine)
     logger.info("Database tables verified/created")
+
+    recovery_db = SessionLocal()
+    try:
+        recovered = recover_interrupted_downloads(recovery_db)
+        if recovered:
+            logger.warning("Recovered %s interrupted download job(s)", recovered)
+    finally:
+        recovery_db.close()
 
     # Start download worker task
     global worker_task, process_task

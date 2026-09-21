@@ -2,7 +2,7 @@
 
 import React from 'react';
 import { motion } from 'framer-motion';
-import { Film, Music, AlertCircle, CheckCircle2, Clock, RotateCw, Trash2, ExternalLink } from 'lucide-react';
+import { Film, Music, AlertCircle, CheckCircle2, Clock, RotateCw, Trash2, ExternalLink, Download } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
 export interface DownloadJobData {
@@ -15,6 +15,13 @@ export interface DownloadJobData {
   progress: number;
   quality?: string | null;
   error_message?: string | null;
+  files?: Array<{
+    id: number;
+    filename: string;
+    file_type: string;
+    file_size?: number | null;
+    download_url: string;
+  }>;
 }
 
 interface DownloadCardProps {
@@ -134,6 +141,27 @@ export default function DownloadCard({ job, onRetry, onCancel }: DownloadCardPro
         <div className="mt-3 p-2 rounded-lg bg-red-50 dark:bg-red-950/40 text-xs text-red-700 dark:text-red-300 flex items-center gap-2">
           <AlertCircle className="w-3.5 h-3.5 shrink-0" />
           <span className="truncate">{job.error_message}</span>
+        </div>
+      )}
+
+      {job.status === 'completed' && job.files && job.files.length > 0 && (
+        <div className="mt-3 flex flex-wrap gap-2">
+          {job.files.map((file) => {
+            const href = file.download_url.startsWith('/api/')
+              ? `/api/worker/${file.download_url.slice('/api/'.length)}`
+              : file.download_url;
+            return (
+              <a
+                key={file.id}
+                href={href}
+                download={file.filename}
+                className="inline-flex items-center justify-center px-3 py-1.5 text-xs gap-1.5 font-medium rounded-lg border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-all"
+              >
+                <Download className="w-3.5 h-3.5" />
+                {file.filename}
+              </a>
+            );
+          })}
         </div>
       )}
     </motion.div>
