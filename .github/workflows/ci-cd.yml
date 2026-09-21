@@ -49,6 +49,17 @@ jobs:
         run: cd services/worker && pytest -v
       - run: docker build -t "$WORKER_IMAGE" -f docker/Dockerfile.worker .
       - run: docker build -t "$WEB_IMAGE" -f docker/Dockerfile.web .
+      - name: Validate Compose and run development smoke test
+        run: |
+          docker compose -f docker-compose.dev.yml config --quiet
+          docker compose -f docker-compose.yml config --quiet
+          trap 'docker compose -f docker-compose.dev.yml down -v' EXIT
+          docker compose -f docker-compose.dev.yml up -d --build --wait
+          curl -fsS http://localhost:8000/api/health/live
+          curl -fsS http://localhost:8000/api/health/ready
+          curl -fsS http://localhost:8000/metrics | grep -q http_requests_total
+          curl -fsS 'http://localhost:8000/socket.io/?EIO=4&transport=polling' | grep -q '^0{'
+          curl -fsS http://localhost:3000 >/dev/null
       - run: docker save "$WORKER_IMAGE" "$WEB_IMAGE" | gzip > images.tar.gz
       - uses: actions/upload-artifact@v4
         with:

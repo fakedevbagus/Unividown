@@ -9,7 +9,7 @@ Baseline main: `2060d00e5366e672fcbaf98d00f79266b45abd7c`
 | Phase | Status | Gate |
 | --- | --- | --- |
 | 0 — baseline, guardrails, docs | Complete in review branch | Documentation and PR evidence prepared |
-| 1 — startup, Docker, CI, Socket.IO, metrics | Implemented; Docker runtime verification pending | Local lint/typecheck/build/tests pass; Docker unavailable in validation environment |
+| 1 — startup, Docker, CI, Socket.IO, metrics | Implemented; CI/Compose smoke rerun pending | Local checks and CI image builds pass; security findings and full Compose smoke remain open |
 | 2 — download lifecycle | Deferred | Route conflict and Redis failure semantics intentionally unchanged |
 | 3–7 | Deferred | Not started |
 
@@ -25,7 +25,8 @@ Baseline main: `2060d00e5366e672fcbaf98d00f79266b45abd7c`
 | Dependency readiness | Working | Required failure returns 503; Redis can be optional for local/test |
 | Prometheus metrics | Working | Imports fixed, request wiring added, format regression test passed |
 | Socket.IO runtime | Working in test | ASGI polling handshake against `sio_app` passed |
-| Docker Compose config | Statically verified | YAML parsed; Docker CLI unavailable, so build/up/start remain unverified |
+| Docker images | Working in CI | Worker core and web production images built successfully on PR #1 |
+| Docker Compose runtime | Pending CI rerun | Config and full dev smoke were added after the first successful image builds |
 | Core worker without Whisper | Working in test | Whisper removed from core requirements; unavailable endpoint returns 503 |
 | Download create without Redis | Broken / Phase 2 | Existing enqueue transaction/fallback behavior is unchanged |
 | `/api/downloads/info` | Broken / Phase 2 | Existing route-order conflict is unchanged |
@@ -50,7 +51,9 @@ Baseline main: `2060d00e5366e672fcbaf98d00f79266b45abd7c`
 | `pytest -q` | 10 passed, 59 deprecation warnings |
 | Liveness/readiness/metrics/Socket.IO regression tests | Passed |
 | Compose YAML parse | Passed for dev and production |
-| Docker builds / `docker compose config` / compose smoke | Not run: Docker CLI unavailable |
+| Worker/web Docker image builds | Passed in GitHub Actions |
+| Trivy image scan | Executed against transferred worker image; failed on HIGH/CRITICAL findings pending triage |
+| `docker compose config` / compose smoke | Added to CI; rerun pending |
 
 ## Known issues
 
@@ -67,4 +70,4 @@ Baseline main: `2060d00e5366e672fcbaf98d00f79266b45abd7c`
 
 ## Next exact step
 
-Run the draft PR on GitHub Actions. Require both jobs to pass, especially worker/web image builds and Trivy scans. On a Docker-capable host, run `docker compose -f docker-compose.dev.yml up --build`, verify Redis/worker/web health, call the Socket.IO polling handshake, and record container startup evidence. Do not start Phase 2 until this evidence is reviewed and the Phase 1 gate is approved.
+Review the rerun of draft PR #1. Confirm the newly added Compose config/up smoke step passes. Triage the worker-image HIGH/CRITICAL Trivy findings without suppressing them. On a Docker-capable host, independently run `docker compose -f docker-compose.dev.yml up --build`, verify Redis/worker/web health, call the Socket.IO polling handshake, and record container startup evidence. Do not start Phase 2 until this evidence is reviewed and the Phase 1 gate is approved.
