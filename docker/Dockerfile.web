@@ -1,5 +1,8 @@
-FROM node:20-alpine AS base
+FROM node:20-alpine AS node-base
 WORKDIR /app
+RUN apk upgrade --no-cache
+
+FROM node-base AS pnpm-base
 RUN corepack enable && \
     for attempt in 1 2 3; do \
       corepack prepare pnpm@9.15.5 --activate && break; \
@@ -7,29 +10,25 @@ RUN corepack enable && \
       sleep 5; \
     done
 
-FROM base AS deps
+FROM pnpm-base AS deps
 COPY pnpm-lock.yaml pnpm-workspace.yaml package.json ./
 COPY apps/web/package.json ./apps/web/
 COPY packages/shared/package.json ./packages/shared/
 RUN pnpm install --frozen-lockfile
 
-FROM base AS builder
+FROM pnpm-base AS builder
 COPY --from=deps /app/node_modules ./node_modules
 COPY --from=deps /app/apps/web/node_modules ./apps/web/node_modules
 COPY . .
 ENV NEXT_TELEMETRY_DISABLED=1
 RUN pnpm --filter @unividown/web build
 
-FROM base AS runner
-ENV NODE_ENV=production PORT=3000 NEXT_TELEMETRY_DISABLED=1
+FROM node-base AS runner
+ENV NODE_ENV=production PORT=3000 HOSTNAME=0.0.0.0 NEXT_TELEMETRY_DISABLED=1
 RUN addgroup --system --gid 1001 nodejs && adduser --system --uid 1001 nextjs
-COPY --from=builder --chown=nextjs:nodejs /app/package.json /app/pnpm-lock.yaml /app/pnpm-workspace.yaml ./
-COPY --from=builder --chown=nextjs:nodejs /app/node_modules ./node_modules
-COPY --from=builder --chown=nextjs:nodejs /app/apps/web/package.json ./apps/web/package.json
-COPY --from=builder --chown=nextjs:nodejs /app/apps/web/node_modules ./apps/web/node_modules
 COPY --from=builder --chown=nextjs:nodejs /app/apps/web/public ./apps/web/public
-COPY --from=builder --chown=nextjs:nodejs /app/apps/web/.next ./apps/web/.next
-COPY --from=builder --chown=nextjs:nodejs /app/packages/shared ./packages/shared
+COPY --from=builder --chown=nextjs:nodejs /app/apps/web/.next/standalone ./
+COPY --from=builder --chown=nextjs:nodejs /app/apps/web/.next/static ./apps/web/.next/static
 USER nextjs
 EXPOSE 3000
-CMD ["pnpm", "--filter", "@unividown/web", "start"]
+CMD ["node", "apps/web/server.js"]

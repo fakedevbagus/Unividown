@@ -1,6 +1,13 @@
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const currentDirectory = path.dirname(fileURLToPath(import.meta.url));
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
+  output: 'standalone',
+  outputFileTracingRoot: path.join(currentDirectory, '../..'),
   async rewrites() {
     return [
       {
@@ -12,4 +19,3 @@ const nextConfig = {
 };
 
 export default nextConfig;
-

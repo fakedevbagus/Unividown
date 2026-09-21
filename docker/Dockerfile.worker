@@ -5,7 +5,8 @@ RUN apt-get -o Acquire::Retries=3 update && \
     apt-get install -y --no-install-recommends ffmpeg && \
     rm -rf /var/lib/apt/lists/*
 COPY services/worker/requirements.txt services/worker/requirements-ai.txt ./
-RUN pip install --no-cache-dir -r requirements.txt && if [ "$INSTALL_AI" = "true" ]; then pip install --no-cache-dir -r requirements-ai.txt; fi
+RUN pip install --no-cache-dir --upgrade pip setuptools wheel==0.48.0 jaraco.context==6.1.2 && \
+    pip install --no-cache-dir -r requirements.txt && if [ "$INSTALL_AI" = "true" ]; then pip install --no-cache-dir -r requirements-ai.txt; fi
 COPY services/worker /app
 ENV PYTHONUNBUFFERED=1 DATABASE_URL="sqlite:////app/data/unividown.db" UPLOAD_DIR="/app/data/uploads" DOWNLOAD_DIR="/app/data/downloads" PROCESSED_DIR="/app/data/processed"
 EXPOSE 8000
