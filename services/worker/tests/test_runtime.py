@@ -4,11 +4,13 @@ import app.main as main_module
 from app.main import app, sio_app
 
 
-def test_liveness_endpoint():
+def test_liveness_endpoint(monkeypatch):
+    monkeypatch.setattr(main_module.settings, "python_env", "test")
     with TestClient(app) as client:
         response = client.get("/api/health/live")
     assert response.status_code == 200
     assert response.json()["status"] == "online"
+    assert response.json()["environment"] == "test"
 
 
 def test_readiness_healthy(monkeypatch):

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useCallback } from 'react';
+import { useEffect, useRef, useCallback, useState } from 'react';
 import { io, Socket } from 'socket.io-client';
 
 export interface ProgressPayload {
@@ -18,29 +18,45 @@ export interface StatusPayload {
 
 export function useWebSocket() {
   const socketRef = useRef<Socket | null>(null);
+  const [connected, setConnected] = useState(false);
 
   useEffect(() => {
-    // Connect to worker Socket.IO server
     const workerUrl = process.env.NEXT_PUBLIC_WORKER_URL || 'http://localhost:8000';
     const socket = io(workerUrl, {
       path: '/socket.io',
       transports: ['websocket', 'polling'],
-      reconnectionAttempts: 5,
+      reconnection: true,
+      reconnectionAttempts: Infinity,
       reconnectionDelay: 1000,
+      reconnectionDelayMax: 10000,
     });
 
     socketRef.current = socket;
 
-    socket.on('connect', () => {
+    const handleConnect = () => {
+      setConnected(true);
       console.log('[WebSocket] Connected to worker:', socket.id);
-    });
-
-    socket.on('disconnect', (reason) => {
+    };
+    const handleDisconnect = (reason: string) => {
+      setConnected(false);
       console.log('[WebSocket] Disconnected from worker:', reason);
-    });
+    };
+    const handleConnectError = (error: Error) => {
+      setConnected(false);
+      console.warn('[WebSocket] Connection failed; polling fallback remains active:', error.message);
+    };
+
+    socket.on('connect', handleConnect);
+    socket.on('disconnect', handleDisconnect);
+    socket.on('connect_error', handleConnectError);
 
     return () => {
+      socket.off('connect', handleConnect);
+      socket.off('disconnect', handleDisconnect);
+      socket.off('connect_error', handleConnectError);
       socket.disconnect();
+      socketRef.current = null;
+      setConnected(false);
     };
   }, []);
 
@@ -56,40 +72,32 @@ export function useWebSocket() {
     const socket = socketRef.current;
     if (!socket) return () => {};
     socket.on('download:progress', callback);
-    return () => {
-      socket.off('download:progress', callback);
-    };
+    return () => socket.off('download:progress', callback);
   }, []);
 
   const onCompleted = useCallback((callback: (data: StatusPayload) => void) => {
     const socket = socketRef.current;
     if (!socket) return () => {};
     socket.on('download:completed', callback);
-    return () => {
-      socket.off('download:completed', callback);
-    };
+    return () => socket.off('download:completed', callback);
   }, []);
 
   const onStatus = useCallback((callback: (data: StatusPayload) => void) => {
     const socket = socketRef.current;
     if (!socket) return () => {};
     socket.on('download:status', callback);
-    return () => {
-      socket.off('download:status', callback);
-    };
+    return () => socket.off('download:status', callback);
   }, []);
 
   const onError = useCallback((callback: (data: { jobId: number; error: string }) => void) => {
     const socket = socketRef.current;
     if (!socket) return () => {};
     socket.on('download:error', callback);
-    return () => {
-      socket.off('download:error', callback);
-    };
+    return () => socket.off('download:error', callback);
   }, []);
 
   return {
-    socket: socketRef.current,
+    connected,
     joinJob,
     leaveJob,
     onProgress,

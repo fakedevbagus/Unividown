@@ -1,89 +1,58 @@
 # Unividown Project Status
 
-Last updated: 2026-09-21 22:35 Asia/Jakarta
-Active branch: `feat/result-serving-and-job-lifecycle`
-Baseline main: `4582fe8cad5ca1dc633038a68814ccacc8b28353`
+Last updated: 2026-09-22 00:49 Asia/Jakarta
+Active branch: `fix/download-polling-and-e2e`
+Baseline main: `2e8be10e95b38d8404c45b8761514f0d9d6f32e2`
 
 ## Phase status
 
 | Phase | Status | Gate |
 | --- | --- | --- |
-| 0 — baseline, guardrails, docs | Complete in review branch | Documentation and PR evidence prepared |
-| 1 — startup, Docker, CI, Socket.IO, metrics | Complete in security-upgrade review branch | Runtime, Docker/Compose, tests, and security policy are green |
-| Security dependency upgrade | Complete in draft PR #2 | Framework/runtime upgrades and image scans pass |
-| 2 — download lifecycle | In progress | Phase 2A merged; result serving, cancellation, recovery, and file upsert implemented for review |
+| 0 — baseline, guardrails, docs | Complete | Merged |
+| 1 — startup, Docker, CI, Socket.IO, metrics | Complete | Runtime, Compose, tests, and security policy green |
+| Security dependency upgrade | Complete | Merged |
+| 2A — route and queue reliability | Complete | Merged |
+| 2B — result serving and lifecycle | Complete | PR #4 merged as `2e8be10` |
+| 2C — resilient progress and end-to-end validation | In review | Adaptive polling implemented; CI and PC-local media validation required |
 | 3–7 | Deferred | Not started |
 
 ## Feature matrix
 
 | Area | Status | Evidence / note |
 | --- | --- | --- |
-| Web lint | Working with known warnings | Two pre-existing image `alt` warnings |
-| Web typecheck | Working | Deterministic clean typecheck passed |
-| Web production build | Working | Next.js 15.5.24 + React 19.2.0 build passed |
-| Worker unit/API tests | Working | 10 tests passed in CI on Python 3.11 |
-| FastAPI liveness | Working | `/api/health/live` regression and Compose smoke passed |
-| Dependency readiness | Working | Required failure returns 503; healthy Compose readiness returns 200 |
-| Prometheus metrics | Working | Format and runtime smoke passed |
-| Socket.IO runtime | Working | Polling handshake passed in tests and Compose smoke |
-| Docker images | Working in CI | Worker core and standalone web production images build successfully |
-| Docker Compose runtime | Working in CI | Dev/production config and full Redis/worker/web smoke passed |
-| Image security policy | Working | Filesystem and image scans pass; expiring worker OS exception is enforced |
-| Core worker without Whisper | Working | Core image starts without Whisper; unavailable endpoint returns 503 |
-| Download create without Redis | Working in local/test mode | Optional Redis returns database fallback; required failure returns 503 without orphan jobs |
-| `/api/downloads/info` | Working in regression test | Static route is registered before `/{job_id}` |
-| Download result serving | In review | Per-job containment and UI download actions implemented |
-| Active download cancellation | In review | Cooperative cancellation interrupts yt-dlp at progress callbacks |
-| Restart recovery | In review | Interrupted download jobs return to pending on worker startup |
+| Web lint/typecheck/build | Pending CI for Phase 2C | Previous main green |
+| Worker regression suite | Pending CI for Phase 2C | Phase 2B had 22 passing tests |
+| Liveness/readiness/metrics | Implemented | Environment now follows `PYTHON_ENV` |
+| Socket.IO runtime | Implemented | UI exposes connection state and reconnects continuously |
+| Polling fallback | In review | 2-second fallback while disconnected; 15-second reconciliation while connected |
+| Download result serving | Working in regression test | Per-job containment and UI result action |
+| Active cancellation | Working in regression test | Cooperative at yt-dlp progress callbacks |
+| Restart recovery | Working in regression test | Interrupted jobs return to pending |
+| Real video/audio smoke | PC-local validation required | See `docs/PHASE2C_LOCAL_VALIDATION.md` |
 | Processing results UI | Deferred | Phase 3–4 |
 
 ## Architecture decisions
 
-- Docker deployments require Redis (`REDIS_REQUIRED=true`); local/test may run with degraded optional Redis readiness.
-- Runtime entrypoint is `app.main:sio_app` so FastAPI and Socket.IO share one ASGI server.
-- Node 20, pnpm 9.15.5, Python 3.11, FFmpeg, and Redis 7 are the supported baseline.
-- Web runtime uses Next standalone output and excludes npm, pnpm, Corepack, dev dependencies, and workspace build tooling.
-- Worker runtime removes pip/setuptools/wheel build tooling after dependency installation.
-- Whisper is optional and excluded from the core worker image.
-- Unfixed Debian worker OS findings have an explicit exception expiring 2026-10-21; fixed OS findings, language packages, and web findings remain blocking.
-- Production remains Docker Compose on a VPS; deployment automation is intentionally disabled until credentials and rollback procedures exist.
+- Redis is required in Docker; local/test may use database fallback.
+- FastAPI and Socket.IO share `app.main:sio_app`.
+- Socket.IO provides low-latency updates; REST polling remains the source-of-truth reconciliation path.
+- Disconnected clients poll every two seconds; connected clients reconcile every fifteen seconds.
+- Cancellation remains cooperative; hard subprocess termination is future hardening.
+- Production target remains Docker Compose on a VPS.
 
 ## Latest verification
 
-| Command/check | Result |
-| --- | --- |
-| Frozen pnpm install | Passed |
-| Web lint | Passed with 2 pre-existing accessibility warnings |
-| Web typecheck | Passed |
-| Next.js 15.5.24 production build | Passed |
-| Backend pytest | 10 passed |
-| Worker/web Docker image builds | Passed |
-| Dev and production Compose config | Passed |
-| Full development Compose smoke | Passed |
-| Liveness/readiness/metrics/Socket.IO/web HTTP | Passed |
-| Trivy filesystem scan | Passed |
-| Worker/web image security policy | Passed |
+- Phase 2B CI and local Compose smoke passed before merge.
+- Phase 2C source changes are committed for CI review.
+- Required PC-local flow is documented in `docs/PHASE2C_LOCAL_VALIDATION.md`.
 
 ## Known issues
 
-### P0/P1 deferred to Phase 2+
-
-- Upload filename/path validation for media tools remains unresolved.
-- Cancellation is cooperative and occurs at yt-dlp progress boundaries; hard subprocess termination remains future hardening.
-
-### Quality debt
-
-- Pydantic class config, `datetime.utcnow()`, TestClient/httpx, Next.js metadata, and two image accessibility warnings remain.
-- Temporary worker OS security exception must be reviewed before 2026-10-21.
+- Media-tool upload filename/path validation remains unresolved.
+- Cancellation is not an OS-level hard kill.
+- Pydantic class config, `datetime.utcnow()`, TestClient/httpx, metadata, and image accessibility warnings remain.
+- Temporary worker OS security exception expires 2026-10-21.
 
 ## Next exact step
 
-Validate the Phase 2B patch locally and in CI, then review result serving, cooperative cancellation, file upsert, and restart recovery before merge.
-
-
-## Phase 2 implementation evidence
-
-- Branch: `fix/download-info-and-queue-reliability`.
-- Backend regression suite: 17 passed.
-- Implemented static info-route ordering, optional database fallback, required Redis 503 cleanup, transactional batch enqueue, priority/FIFO scoring, queue removal on pending cancellation, and idempotent retry.
-- Intentionally deferred: secure result-serving endpoint, process-level cancellation, downloaded-file upsert, restart recovery, and frontend polling fallback.
+Open the Phase 2C pull request, wait for CI, then run the PC-local checklist. Merge only after the user reports `pass`; then begin secure media uploads in Phase 3.

@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState, useCallback } from 'react';
 import DownloadCard, { DownloadJobData } from './download-card';
-import { RefreshCw, Inbox } from 'lucide-react';
+import { RefreshCw, Inbox, Radio, WifiOff } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useWebSocket } from '@/hooks/use-websocket';
 
@@ -10,24 +10,23 @@ interface DownloadQueueProps {
   refreshTrigger?: number;
 }
 
+const CONNECTED_POLL_INTERVAL_MS = 15000;
+const FALLBACK_POLL_INTERVAL_MS = 2000;
+
 export default function DownloadQueue({ refreshTrigger }: DownloadQueueProps) {
   const [jobs, setJobs] = useState<DownloadJobData[]>([]);
   const [loading, setLoading] = useState(true);
-  const { joinJob, onProgress, onCompleted, onStatus, onError } = useWebSocket();
+  const { connected, joinJob, onProgress, onCompleted, onStatus, onError } = useWebSocket();
 
   const fetchJobs = useCallback(async () => {
     try {
-      const res = await fetch('/api/worker/downloads');
-      if (res.ok) {
-        const data: DownloadJobData[] = await res.json();
-        setJobs(data);
-        // Automatically join rooms for active downloads
-        data.forEach((job) => {
-          if (job.status === 'processing' || job.status === 'pending') {
-            joinJob(job.id);
-          }
-        });
-      }
+      const res = await fetch('/api/worker/downloads', { cache: 'no-store' });
+      if (!res.ok) return;
+      const data: DownloadJobData[] = await res.json();
+      setJobs(data);
+      data.forEach((job) => {
+        if (job.status === 'processing' || job.status === 'pending') joinJob(job.id);
+      });
     } catch (err) {
       console.warn('Could not fetch jobs:', err);
     } finally {
@@ -35,51 +34,41 @@ export default function DownloadQueue({ refreshTrigger }: DownloadQueueProps) {
     }
   }, [joinJob]);
 
-  // Initial fetch and occasional background sync
   useEffect(() => {
-    fetchJobs();
-    const interval = setInterval(fetchJobs, 5000);
-    return () => clearInterval(interval);
-  }, [fetchJobs, refreshTrigger]);
+    void fetchJobs();
+    const pollInterval = connected ? CONNECTED_POLL_INTERVAL_MS : FALLBACK_POLL_INTERVAL_MS;
+    const interval = window.setInterval(() => void fetchJobs(), pollInterval);
+    return () => window.clearInterval(interval);
+  }, [connected, fetchJobs, refreshTrigger]);
 
-  // WebSocket real-time event listeners
   useEffect(() => {
     const unsubProgress = onProgress((data) => {
-      setJobs((prev) =>
-        prev.map((job) =>
-          job.id === data.jobId
-            ? { ...job, progress: data.progress, status: 'processing' }
-            : job
-        )
-      );
+      setJobs((prev) => prev.map((job) =>
+        job.id === data.jobId ? { ...job, progress: data.progress, status: 'processing' } : job
+      ));
     });
 
     const unsubStatus = onStatus((data) => {
-      setJobs((prev) =>
-        prev.map((job) =>
-          job.id === data.jobId ? { ...job, status: data.status } : job
-        )
-      );
+      setJobs((prev) => prev.map((job) =>
+        job.id === data.jobId ? { ...job, status: data.status } : job
+      ));
+      if (['cancelled', 'failed'].includes(data.status)) void fetchJobs();
     });
 
     const unsubCompleted = onCompleted((data) => {
-      setJobs((prev) =>
-        prev.map((job) =>
-          job.id === data.jobId
-            ? { ...job, status: 'completed', progress: 100, title: data.title || job.title }
-            : job
-        )
-      );
+      setJobs((prev) => prev.map((job) =>
+        job.id === data.jobId
+          ? { ...job, status: 'completed', progress: 100, title: data.title || job.title }
+          : job
+      ));
+      void fetchJobs();
     });
 
     const unsubError = onError((data) => {
-      setJobs((prev) =>
-        prev.map((job) =>
-          job.id === data.jobId
-            ? { ...job, status: 'failed', error_message: data.error }
-            : job
-        )
-      );
+      setJobs((prev) => prev.map((job) =>
+        job.id === data.jobId ? { ...job, status: 'failed', error_message: data.error } : job
+      ));
+      void fetchJobs();
     });
 
     return () => {
@@ -88,13 +77,14 @@ export default function DownloadQueue({ refreshTrigger }: DownloadQueueProps) {
       unsubCompleted();
       unsubError();
     };
-  }, [onProgress, onStatus, onCompleted, onError]);
+  }, [fetchJobs, onProgress, onStatus, onCompleted, onError]);
 
   const handleRetry = async (jobId: number) => {
     try {
-      await fetch(`/api/worker/downloads/${jobId}/retry`, { method: 'POST' });
+      const response = await fetch(`/api/worker/downloads/${jobId}/retry`, { method: 'POST' });
+      if (!response.ok) throw new Error(`Retry failed with HTTP ${response.status}`);
       joinJob(jobId);
-      fetchJobs();
+      await fetchJobs();
     } catch (err) {
       console.error('Retry failed:', err);
     }
@@ -102,8 +92,9 @@ export default function DownloadQueue({ refreshTrigger }: DownloadQueueProps) {
 
   const handleCancel = async (jobId: number) => {
     try {
-      await fetch(`/api/worker/downloads/${jobId}`, { method: 'DELETE' });
-      fetchJobs();
+      const response = await fetch(`/api/worker/downloads/${jobId}`, { method: 'DELETE' });
+      if (!response.ok) throw new Error(`Cancel failed with HTTP ${response.status}`);
+      await fetchJobs();
     } catch (err) {
       console.error('Cancel failed:', err);
     }
@@ -111,22 +102,27 @@ export default function DownloadQueue({ refreshTrigger }: DownloadQueueProps) {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <h2 className="text-xl font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
-          <span>Download Queue</span>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex flex-wrap items-center gap-2">
+          <h2 className="text-xl font-bold text-slate-900 dark:text-slate-100">Download Queue</h2>
           {jobs.length > 0 && (
             <span className="text-xs px-2 py-0.5 rounded-full bg-indigo-100 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 font-medium">
               {jobs.length}
             </span>
           )}
-        </h2>
-        <Button
-          size="sm"
-          variant="outline"
-          onClick={fetchJobs}
-          className="text-xs"
-          disabled={loading}
-        >
+          <span
+            className={`inline-flex items-center gap-1 rounded-full px-2 py-1 text-[11px] font-medium ${
+              connected
+                ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300'
+                : 'bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300'
+            }`}
+            title={connected ? 'Socket.IO connected; periodic reconciliation remains enabled' : 'Socket.IO disconnected; queue refreshes every 2 seconds'}
+          >
+            {connected ? <Radio className="h-3 w-3" /> : <WifiOff className="h-3 w-3" />}
+            {connected ? 'Live updates' : 'Polling fallback'}
+          </span>
+        </div>
+        <Button size="sm" variant="outline" onClick={() => void fetchJobs()} className="text-xs" disabled={loading}>
           <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
           Refresh
         </Button>
@@ -141,16 +137,10 @@ export default function DownloadQueue({ refreshTrigger }: DownloadQueueProps) {
       ) : (
         <div className="space-y-3">
           {jobs.map((job) => (
-            <DownloadCard
-              key={job.id}
-              job={job}
-              onRetry={handleRetry}
-              onCancel={handleCancel}
-            />
+            <DownloadCard key={job.id} job={job} onRetry={handleRetry} onCancel={handleCancel} />
           ))}
         </div>
       )}
     </div>
   );
 }
-

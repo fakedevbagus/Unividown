@@ -31,30 +31,26 @@ All notable changes to Unividown are documented here.
 - Local typecheck failures caused by stale generated `.next/types` entries from removed routes.
 - Docker contexts unnecessarily transferring local `node_modules`, `.next`, data, and virtual environments.
 
-### Deferred
-
-- Download route order, Redis queue fallback/atomicity, uploads, result serving, and all Phase 2+ behavior remain intentionally unchanged.
-
 ### Security upgrade branch
 
 - Upgraded Next.js to 15.5.24 and React/React DOM to 19.2.0.
 - Updated React types, Next ESLint configuration, and PostCSS to patched versions.
 - Converted the production web image to Next standalone output so build tooling, pnpm, and dev dependencies are excluded from runtime.
-- Added Alpine package upgrades to the web base and upgraded Python packaging tools in the worker image.
 
-### Phase 2 — download queue reliability (in review)
+### Phase 2 — download queue reliability
 
-- Registered `/api/downloads/info` before the dynamic job route so metadata requests are no longer parsed as job IDs.
-- Added transactional multi-job Redis enqueue, deterministic priority/FIFO scoring, and explicit required-Redis failures.
-- Added database fallback when Redis is optional, with API responses identifying the active queue backend.
-- Prevented orphan database jobs when required enqueue fails.
-- Made retry idempotent for jobs already pending/processing and restored prior state when required re-enqueue fails.
-- Added regression coverage for route order, fallback, required failure, orphan prevention, priority semantics, and retry idempotency.
+- Registered `/api/downloads/info` before the dynamic job route.
+- Added transactional multi-job Redis enqueue, priority/FIFO scoring, database fallback, orphan prevention, and idempotent retry.
 
 ### Phase 2 — result serving and job lifecycle
 
-- Added result metadata and a download endpoint constrained to each job's configured download directory.
-- Added result download actions to completed jobs in the web UI.
-- Added cooperative cancellation for active yt-dlp jobs and retained pending queue removal.
-- Added startup recovery for jobs interrupted while processing.
-- Changed downloaded-file persistence to update existing records instead of duplicating them on retry.
+- Added contained result serving, result download actions, cooperative cancellation, startup recovery, and downloaded-file upsert.
+
+### Phase 2C — resilient progress delivery
+
+- Added explicit Socket.IO connection state and unlimited backoff reconnection.
+- Added adaptive REST polling: two seconds while disconnected and periodic reconciliation while connected.
+- Refreshes terminal job state from the API so completed file metadata appears even if a socket event omits it.
+- Added a visible Live updates/Polling fallback status badge.
+- Fixed liveness environment reporting to honor `PYTHON_ENV`.
+- Added a PC-local validation checklist for video, audio, result download, cancellation, retry, reconnect, and restart recovery.
