@@ -44,6 +44,7 @@ services:
     build:
       context: .
       dockerfile: docker/Dockerfile.web
+      target: builder
     command: pnpm --filter @unividown/web dev
     ports:
       - "3000:3000"
