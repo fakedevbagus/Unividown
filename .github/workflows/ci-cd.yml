@@ -50,6 +50,10 @@ jobs:
           REDIS_REQUIRED: 'true'
         run: cd services/worker && pytest -v
       - run: docker build -t "$WORKER_IMAGE" -f docker/Dockerfile.worker .
+      - name: Inventory worker Python packages
+        run: |
+          inventory=$(docker run --rm "$WORKER_IMAGE" python -c "import glob, importlib.metadata as m; names=['msgpack','setuptools']; print('; '.join(f'{name}={next((d.version for d in m.distributions() if d.metadata.get(\"Name\",\"\").lower()==name),\"absent\")}' for name in names)); print('metadata=' + ','.join(glob.glob('/usr/local/lib/python3.11/site-packages/*msgpack*') + glob.glob('/usr/local/lib/python3.11/site-packages/*setuptools*') + glob.glob('/usr/local/lib/python3.11/ensurepip/_bundled/*')))" | tr '\n' ' ')
+          echo "::notice title=Worker Python package inventory::$inventory"
       - run: docker build -t "$WEB_IMAGE" -f docker/Dockerfile.web .
       - name: Validate Compose and run development smoke test
         run: |

@@ -67,7 +67,7 @@ def main() -> int:
                     unfixed_os_exceptions, image, package, finding_class, fixed
                 )
 
-            key = f"{image}:{finding['Severity']}:{vuln_id}:{package}:{fixed}"
+            key = f"{image}:{finding['Severity']}:{vuln_id}:{package}:installed={installed}:fixed={fixed}"
             if exception and active(exception, today):
                 expiry = exception["expires"]
                 excepted.append(key)
