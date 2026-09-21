@@ -30,6 +30,7 @@ class Settings(BaseSettings):
 
     # Redis
     redis_url: Optional[str] = 'redis://localhost:6379'
+    redis_required: bool = False
 
     # Worker processes
     max_worker_processes: int = 3

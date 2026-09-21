@@ -1,26 +1,13 @@
-FROM python:3.11-slim
-
+FROM python:3.11-slim-bookworm
 WORKDIR /app
-
-# Install system dependencies (FFmpeg)
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    ffmpeg \
-    curl \
-    && rm -rf /var/lib/apt/lists/*
-
-# Install Python dependencies
-COPY services/worker/requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
-
-# Copy application source
+ARG INSTALL_AI=false
+RUN apt-get -o Acquire::Retries=3 update && \
+    apt-get install -y --no-install-recommends ffmpeg && \
+    rm -rf /var/lib/apt/lists/*
+COPY services/worker/requirements.txt services/worker/requirements-ai.txt ./
+RUN pip install --no-cache-dir -r requirements.txt && if [ "$INSTALL_AI" = "true" ]; then pip install --no-cache-dir -r requirements-ai.txt; fi
 COPY services/worker /app
-
-ENV PYTHONUNBUFFERED=1
-ENV DATABASE_URL="sqlite:////app/data/unividown.db"
-ENV UPLOAD_DIR="/app/data/uploads"
-ENV DOWNLOAD_DIR="/app/data/downloads"
-ENV PROCESSED_DIR="/app/data/processed"
-
+ENV PYTHONUNBUFFERED=1 DATABASE_URL="sqlite:////app/data/unividown.db" UPLOAD_DIR="/app/data/uploads" DOWNLOAD_DIR="/app/data/downloads" PROCESSED_DIR="/app/data/processed"
 EXPOSE 8000
-
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+HEALTHCHECK --interval=30s --timeout=3s --start-period=15s --retries=3 CMD ["python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health/ready', timeout=3)"]
+CMD ["uvicorn", "app.main:sio_app", "--host", "0.0.0.0", "--port", "8000"]
