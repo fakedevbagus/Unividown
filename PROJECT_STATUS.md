@@ -1,89 +1,63 @@
 # Unividown Project Status
 
-Last updated: 2026-09-21 22:35 Asia/Jakarta
-Active branch: `feat/result-serving-and-job-lifecycle`
-Baseline main: `4582fe8cad5ca1dc633038a68814ccacc8b28353`
+Last updated: 2026-09-22 13:00 Asia/Jakarta
+Active branch: `fix/download-polling-and-e2e`
+Baseline main: `2e8be10e95b38d8404c45b8761514f0d9d6f32e2`
 
 ## Phase status
 
 | Phase | Status | Gate |
 | --- | --- | --- |
-| 0 — baseline, guardrails, docs | Complete in review branch | Documentation and PR evidence prepared |
-| 1 — startup, Docker, CI, Socket.IO, metrics | Complete in security-upgrade review branch | Runtime, Docker/Compose, tests, and security policy are green |
-| Security dependency upgrade | Complete in draft PR #2 | Framework/runtime upgrades and image scans pass |
-| 2 — download lifecycle | In progress | Phase 2A merged; result serving, cancellation, recovery, and file upsert implemented for review |
+| 0 — baseline, guardrails, docs | Complete | Merged |
+| 1 — startup, Docker, CI, Socket.IO, metrics | Complete | Runtime, Compose, tests, and security policy green |
+| Security dependency upgrade | Complete | Merged |
+| 2A — route and queue reliability | Complete | Merged |
+| 2B — result serving and lifecycle | Complete | PR #4 merged as `2e8be10` |
+| 2C — resilient progress and end-to-end validation | In review | Implementation and PC-local gate passed; fresh CI security result required |
 | 3–7 | Deferred | Not started |
 
 ## Feature matrix
 
 | Area | Status | Evidence / note |
 | --- | --- | --- |
-| Web lint | Working with known warnings | Two pre-existing image `alt` warnings |
-| Web typecheck | Working | Deterministic clean typecheck passed |
-| Web production build | Working | Next.js 15.5.24 + React 19.2.0 build passed |
-| Worker unit/API tests | Working | 10 tests passed in CI on Python 3.11 |
-| FastAPI liveness | Working | `/api/health/live` regression and Compose smoke passed |
-| Dependency readiness | Working | Required failure returns 503; healthy Compose readiness returns 200 |
-| Prometheus metrics | Working | Format and runtime smoke passed |
-| Socket.IO runtime | Working | Polling handshake passed in tests and Compose smoke |
-| Docker images | Working in CI | Worker core and standalone web production images build successfully |
-| Docker Compose runtime | Working in CI | Dev/production config and full Redis/worker/web smoke passed |
-| Image security policy | Working | Filesystem and image scans pass; expiring worker OS exception is enforced |
-| Core worker without Whisper | Working | Core image starts without Whisper; unavailable endpoint returns 503 |
-| Download create without Redis | Working in local/test mode | Optional Redis returns database fallback; required failure returns 503 without orphan jobs |
-| `/api/downloads/info` | Working in regression test | Static route is registered before `/{job_id}` |
-| Download result serving | In review | Per-job containment and UI download actions implemented |
-| Active download cancellation | In review | Cooperative cancellation interrupts yt-dlp at progress callbacks |
-| Restart recovery | In review | Interrupted download jobs return to pending on worker startup |
+| Web lint/typecheck/build | Working | Local and CI lint/test/build passed; two existing accessibility warnings remain |
+| Worker regression suite | Working | 22 tests passed locally and in CI |
+| Liveness/readiness/metrics | Working | Environment follows `PYTHON_ENV`; local runtime checks passed |
+| Socket.IO runtime | Working | Handshake and browser reconnect validation passed |
+| Polling fallback | Working locally | 2-second fallback while disconnected; 15-second reconciliation while connected |
+| Download result serving | Working | Per-job containment, result action, and PC-local download passed |
+| Active cancellation | Working | Cooperative cancellation passed local validation |
+| Restart recovery | Working | Interrupted job recovery passed local validation |
+| Real video/audio smoke | Working locally | User reported the Phase 2C PC-local checklist completed without errors |
 | Processing results UI | Deferred | Phase 3–4 |
 
 ## Architecture decisions
 
-- Docker deployments require Redis (`REDIS_REQUIRED=true`); local/test may run with degraded optional Redis readiness.
-- Runtime entrypoint is `app.main:sio_app` so FastAPI and Socket.IO share one ASGI server.
-- Node 20, pnpm 9.15.5, Python 3.11, FFmpeg, and Redis 7 are the supported baseline.
-- Web runtime uses Next standalone output and excludes npm, pnpm, Corepack, dev dependencies, and workspace build tooling.
-- Worker runtime removes pip/setuptools/wheel build tooling after dependency installation.
-- Whisper is optional and excluded from the core worker image.
-- Unfixed Debian worker OS findings have an explicit exception expiring 2026-10-21; fixed OS findings, language packages, and web findings remain blocking.
-- Production remains Docker Compose on a VPS; deployment automation is intentionally disabled until credentials and rollback procedures exist.
+- Redis is required in Docker; local/test may use database fallback.
+- FastAPI and Socket.IO share `app.main:sio_app`.
+- Socket.IO provides low-latency updates; REST polling remains the source-of-truth reconciliation path.
+- Disconnected clients poll every two seconds; connected clients reconcile every fifteen seconds.
+- Cancellation remains cooperative; hard subprocess termination is future hardening.
+- Production target remains Docker Compose on a VPS.
 
 ## Latest verification
 
-| Command/check | Result |
-| --- | --- |
-| Frozen pnpm install | Passed |
-| Web lint | Passed with 2 pre-existing accessibility warnings |
-| Web typecheck | Passed |
-| Next.js 15.5.24 production build | Passed |
-| Backend pytest | 10 passed |
-| Worker/web Docker image builds | Passed |
-| Dev and production Compose config | Passed |
-| Full development Compose smoke | Passed |
-| Liveness/readiness/metrics/Socket.IO/web HTTP | Passed |
-| Trivy filesystem scan | Passed |
-| Worker/web image security policy | Passed |
+- Frozen pnpm install passed.
+- Frontend lint, typecheck, and Next.js production build passed; only known warnings remain.
+- Backend regression suite: 22 passed.
+- Worker and web images built successfully on the user's PC.
+- Redis, worker, and web became healthy in development Compose.
+- Liveness, readiness, Prometheus metrics, and Socket.IO handshake passed.
+- Browser/media Phase 2C validation completed without errors according to the user.
+- Initial PR security job failed without a useful public annotation; this documentation commit triggers a fresh complete CI run before merge.
 
 ## Known issues
 
-### P0/P1 deferred to Phase 2+
-
-- Upload filename/path validation for media tools remains unresolved.
-- Cancellation is cooperative and occurs at yt-dlp progress boundaries; hard subprocess termination remains future hardening.
-
-### Quality debt
-
-- Pydantic class config, `datetime.utcnow()`, TestClient/httpx, Next.js metadata, and two image accessibility warnings remain.
-- Temporary worker OS security exception must be reviewed before 2026-10-21.
+- Media-tool upload filename/path validation remains unresolved.
+- Cancellation is not an OS-level hard kill.
+- Pydantic class config, `datetime.utcnow()`, TestClient/httpx, metadata, and image accessibility warnings remain.
+- Temporary worker OS security exception expires 2026-10-21.
 
 ## Next exact step
 
-Validate the Phase 2B patch locally and in CI, then review result serving, cooperative cancellation, file upsert, and restart recovery before merge.
-
-
-## Phase 2 implementation evidence
-
-- Branch: `fix/download-info-and-queue-reliability`.
-- Backend regression suite: 17 passed.
-- Implemented static info-route ordering, optional database fallback, required Redis 503 cleanup, transactional batch enqueue, priority/FIFO scoring, queue removal on pending cancellation, and idempotent retry.
-- Intentionally deferred: secure result-serving endpoint, process-level cancellation, downloaded-file upsert, restart recovery, and frontend polling fallback.
+Wait for the fresh PR #5 CI run. If lint/test/build and security policy are green, mark the PR ready, squash-merge it, and begin Phase 3 secure media uploads.

@@ -5,6 +5,7 @@ from pydantic_settings import BaseSettings
 class Settings(BaseSettings):
     app_name: str = 'Unividown Worker API'
     debug: bool = False
+    python_env: str = 'production'
 
     # Database
     database_url: str = 'sqlite:///./data/unividown.db'
