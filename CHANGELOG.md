@@ -6,21 +6,20 @@ All notable changes to Unividown are documented here.
 
 ### Phase 2 — download recovery
 
-- Fixed metadata route order, queue fallback/atomicity, orphan prevention, priority/FIFO, and idempotent retry.
-- Added contained result serving, result download actions, cooperative cancellation, restart recovery, and downloaded-file upsert.
-- Added Socket.IO state, continuous reconnect, adaptive REST polling, and terminal-state reconciliation.
-- Fixed liveness environment reporting to honor `PYTHON_ENV`.
+- Fixed route order, queue reliability, secure result serving, lifecycle recovery, and resilient progress delivery.
 
 ### Phase 3A — secure media uploads
 
-- Replaced client filenames with UUID-based storage names and streamed size enforcement.
-- Added extension/libmagic MIME validation, traversal/collision prevention, and failure cleanup.
+- Added UUID upload storage, streaming limits, extension/libmagic validation, traversal/collision prevention, and cleanup.
 
 ### Phase 3B — processing status and results
 
-- Added `status_url` to queued processing responses.
-- Removed raw input/output filesystem paths from processing API responses.
-- Added contained processing-result downloads with filename and size metadata.
-- Added restart recovery for interrupted processing jobs.
-- Cleans temporary upload inputs after processing reaches completed or failed state.
-- Added regression coverage and a PC-local validation checklist.
+- Added safe processing status, contained result downloads, restart recovery, terminal input cleanup, and one-command validation.
+
+### Phase 3C — processing results UI
+
+- Added a reusable processing-job polling hook that stops at terminal state.
+- Added a shared status/progress/error/result-download component.
+- Connected video and audio converter pages to live processing state and downloadable results.
+- Corrected the audio converter to use `/tools/audio/convert` instead of the generic video conversion endpoint.
+- Added a one-command local validation runner.
