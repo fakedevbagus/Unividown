@@ -14,6 +14,7 @@ bash scripts/validate_phase3f_local.sh
 
 echo "[2/5] Start clean stack and generate deterministic fixtures"
 $COMPOSE up -d --build --wait
+BASELINE_UPLOADS="$($COMPOSE exec -T worker sh -lc 'find /app/data/uploads -maxdepth 1 -type f -printf "%f\n" | sort')"
 ffmpeg -loglevel error -f lavfi -i testsrc=size=640x360:rate=24:duration=4 -f lavfi -i sine=frequency=440:duration=4 -c:v libx264 -pix_fmt yuv420p -c:a aac -shortest -y "$WORK/video.mp4"
 ffmpeg -loglevel error -f lavfi -i color=c=red:s=640x480 -frames:v 1 -y "$WORK/image.png"
 printf '1\n00:00:00,000 --> 00:00:02,000\nUnividown subtitle fixture\n' >"$WORK/subtitle.srt"
@@ -53,7 +54,17 @@ CODE="$(curl -sS -o "$WORK/transcription.json" -w '%{http_code}' -F "file=@$WORK
 [[ "$CODE" == 503 ]] || { echo "ERROR: core transcription expected HTTP 503, got $CODE"; cat "$WORK/transcription.json"; exit 1; }
 python3 -c 'import json; data=json.load(open("/tmp/unividown-phase3-complete/transcription.json")); assert "capability unavailable" in data["detail"].lower()'
 
-! $COMPOSE exec -T worker sh -lc 'find /app/data/uploads -maxdepth 1 -type f -print -quit' | grep -q . || { echo "ERROR: terminal processing left upload files"; exit 1; }
+CURRENT_UPLOADS=""
+for attempt in $(seq 1 15); do
+  CURRENT_UPLOADS="$($COMPOSE exec -T worker sh -lc 'find /app/data/uploads -maxdepth 1 -type f -printf "%f\n" | sort')"
+  [[ "$CURRENT_UPLOADS" == "$BASELINE_UPLOADS" ]] && break
+  sleep 1
+done
+if [[ "$CURRENT_UPLOADS" != "$BASELINE_UPLOADS" ]]; then
+  printf 'ERROR: terminal processing did not restore the upload baseline\nBaseline uploads:\n%s\nCurrent uploads:\n%s\n' "$BASELINE_UPLOADS" "$CURRENT_UPLOADS"
+  exit 1
+fi
+! $COMPOSE exec -T worker sh -lc 'find /app/data/uploads -maxdepth 1 -type f -name "*.part" -print -quit' | grep -q . || { echo "ERROR: partial upload files remain"; exit 1; }
 
 echo "[5/5] PASS"
 echo "PASS: Complete Phase 3 media fixture gate completed"
