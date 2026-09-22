@@ -8,18 +8,14 @@ All notable changes to Unividown are documented here.
 
 - Restored the complete download lifecycle with secure results and resilient progress delivery.
 
-### Phase 3A–3B — secure processing backend
+### Phase 3A–3D — secure media processing
 
-- Added secure uploads, safe processing status, contained result downloads, restart recovery, and terminal cleanup.
+- Added secure UUID uploads, actual MIME validation, safe processing status/results, restart recovery, terminal cleanup, and result UI for every media tool.
 
-### Phase 3C — core processing results UI
+### Phase 3E — media input and parameter validation
 
-- Added reusable terminal-aware polling and shared progress/error/result rendering.
-- Connected video and audio converter pages and corrected the dedicated audio endpoint.
-
-### Phase 3D — remaining processing tools UI
-
-- Connected video trimming, image optimization, subtitle extraction, GIF creation, and optional transcription to the shared processing lifecycle.
-- Added a reusable processing-submit hook with backend error details.
-- Every media tool page now follows queued jobs to terminal state and exposes downloadable results when available.
-- Added a one-command local validation runner.
+- Added per-tool actual-MIME policies for video, audio, image, subtitle, GIF, and transcription inputs.
+- Added strict allowlists for video/audio output formats and Whisper models.
+- Added bounds and cross-field validation for trim, image quality/width, GIF timing/FPS/scale, merge file count, and compression bitrate.
+- Added a capabilities endpoint describing supported formats and optional transcription availability.
+- Added negative regression coverage and a one-command validation runner.
