@@ -2,7 +2,7 @@ FROM python:3.11-slim-bookworm
 WORKDIR /app
 ARG INSTALL_AI=false
 RUN apt-get -o Acquire::Retries=3 update && \
-    apt-get install -y --no-install-recommends ffmpeg && \
+    apt-get install -y --no-install-recommends ffmpeg libmagic1 && \
     rm -rf /var/lib/apt/lists/*
 COPY services/worker/requirements.txt services/worker/requirements-ai.txt ./
 RUN pip install --no-cache-dir --upgrade pip && \
