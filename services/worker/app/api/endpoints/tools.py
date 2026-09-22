@@ -1,210 +1,85 @@
 import importlib.util
 import json
-import os
-import shutil
-from pathlib import Path
 from typing import List, Optional
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
+
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.models.processing_job import ProcessingJob
+from app.services.uploads import cleanup_uploads, save_upload
+from app.utils.file_validator import validate_multipart_files
 
 router = APIRouter(prefix="/tools", tags=["tools"])
 
-UPLOAD_DIR = Path(os.getenv("UPLOAD_DIR", "./data/uploads")).resolve()
-UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+
+async def queue_processing_job(files: List[UploadFile], tool_type: str, parameters: dict, db: Session) -> ProcessingJob:
+    validate_multipart_files(files)
+    saved_paths: List[str] = []
+    try:
+        for upload in files:
+            saved_paths.append(await save_upload(upload))
+        job = ProcessingJob(tool_type=tool_type, input_files=json.dumps(saved_paths), parameters=json.dumps(parameters), status="pending", progress=0.0)
+        db.add(job)
+        db.commit()
+        db.refresh(job)
+        return job
+    except Exception:
+        db.rollback()
+        cleanup_uploads(saved_paths)
+        raise
 
 
-async def save_upload(file: UploadFile) -> str:
-    destination = UPLOAD_DIR / file.filename
-    with destination.open("wb") as buffer:
-        shutil.copyfileobj(file.file, buffer)
-    return str(destination)
+def queued_response(job: ProcessingJob, **extra):
+    return {"job_id": job.id, "status": "queued", **extra}
 
 
 @router.post("/convert")
-async def convert_media(
-    file: UploadFile = File(...),
-    format: str = Form("mp4"),
-    db: Session = Depends(get_db),
-):
-    saved_path = await save_upload(file)
-    job = ProcessingJob(
-        tool_type="convert",
-        input_files=json.dumps([saved_path]),
-        parameters=json.dumps({"format": format}),
-        status="pending",
-        progress=0.0,
-    )
-    db.add(job)
-    db.commit()
-    db.refresh(job)
-    return {"job_id": job.id, "status": "queued"}
+async def convert_media(file: UploadFile = File(...), format: str = Form("mp4"), db: Session = Depends(get_db)):
+    return queued_response(await queue_processing_job([file], "convert", {"format": format}, db))
 
 
 @router.post("/trim")
-async def trim_media(
-    file: UploadFile = File(...),
-    start: float = Form(0.0),
-    end: float = Form(10.0),
-    db: Session = Depends(get_db),
-):
-    saved_path = await save_upload(file)
-    job = ProcessingJob(
-        tool_type="trim",
-        input_files=json.dumps([saved_path]),
-        parameters=json.dumps({"start": start, "end": end}),
-        status="pending",
-        progress=0.0,
-    )
-    db.add(job)
-    db.commit()
-    db.refresh(job)
-    return {"job_id": job.id, "status": "queued"}
+async def trim_media(file: UploadFile = File(...), start: float = Form(0.0), end: float = Form(10.0), db: Session = Depends(get_db)):
+    return queued_response(await queue_processing_job([file], "trim", {"start": start, "end": end}, db))
 
 
 @router.post("/compress")
-async def compress_media(
-    file: UploadFile = File(...),
-    bitrate: str = Form("1000k"),
-    db: Session = Depends(get_db),
-):
-    saved_path = await save_upload(file)
-    job = ProcessingJob(
-        tool_type="compress",
-        input_files=json.dumps([saved_path]),
-        parameters=json.dumps({"bitrate": bitrate}),
-        status="pending",
-        progress=0.0,
-    )
-    db.add(job)
-    db.commit()
-    db.refresh(job)
-    return {"job_id": job.id, "status": "queued"}
+async def compress_media(file: UploadFile = File(...), bitrate: str = Form("1000k"), db: Session = Depends(get_db)):
+    return queued_response(await queue_processing_job([file], "compress", {"bitrate": bitrate}, db))
 
 
 @router.post("/merge")
-async def merge_media(
-    files: List[UploadFile] = File(...),
-    db: Session = Depends(get_db),
-):
-    saved_paths = []
-    for f in files:
-        path = await save_upload(f)
-        saved_paths.append(path)
-
-    job = ProcessingJob(
-        tool_type="merge",
-        input_files=json.dumps(saved_paths),
-        parameters=json.dumps({}),
-        status="pending",
-        progress=0.0,
-    )
-    db.add(job)
-    db.commit()
-    db.refresh(job)
-    return {"job_id": job.id, "status": "queued"}
+async def merge_media(files: List[UploadFile] = File(...), db: Session = Depends(get_db)):
+    return queued_response(await queue_processing_job(files, "merge", {}, db))
 
 
-# Phase 16: New tool endpoints
 @router.post("/audio/convert")
-async def audio_convert(
-    file: UploadFile = File(...),
-    format: str = Form("mp3"),
-    db: Session = Depends(get_db),
-):
-    """Extract/convert audio from video"""
-    saved_path = await save_upload(file)
-    job = ProcessingJob(
-        tool_type="audio_convert",
-        input_files=json.dumps([saved_path]),
-        parameters=json.dumps({"format": format}),
-        status="pending",
-        progress=0.0,
-    )
-    db.add(job)
-    db.commit()
-    db.refresh(job)
-    return {"job_id": job.id, "status": "queued"}
+async def audio_convert(file: UploadFile = File(...), format: str = Form("mp3"), db: Session = Depends(get_db)):
+    return queued_response(await queue_processing_job([file], "audio_convert", {"format": format}, db))
 
 
 @router.post("/image/optimize")
-async def image_optimize(
-    file: UploadFile = File(...),
-    quality: int = Form(85),
-    max_width: int = Form(1920),
-    db: Session = Depends(get_db),
-):
-    """Optimize image for web"""
-    saved_path = await save_upload(file)
-    job = ProcessingJob(
-        tool_type="image_optimize",
-        input_files=json.dumps([saved_path]),
-        parameters=json.dumps({"quality": quality, "max_width": max_width}),
-        status="pending",
-        progress=0.0,
-    )
-    db.add(job)
-    db.commit()
-    db.refresh(job)
-    return {"job_id": job.id, "status": "queued"}
+async def image_optimize(file: UploadFile = File(...), quality: int = Form(85), max_width: int = Form(1920), db: Session = Depends(get_db)):
+    return queued_response(await queue_processing_job([file], "image_optimize", {"quality": quality, "max_width": max_width}, db))
 
 
 @router.post("/subtitle/extract")
-async def subtitle_extract(
-    file: UploadFile = File(...),
-    db: Session = Depends(get_db),
-):
-    """Extract subtitles from video"""
-    saved_path = await save_upload(file)
-    job = ProcessingJob(
-        tool_type="subtitle_extract",
-        input_files=json.dumps([saved_path]),
-        parameters=json.dumps({}),
-        status="pending",
-        progress=0.0,
-    )
-    db.add(job)
-    db.commit()
-    db.refresh(job)
-    return {"job_id": job.id, "status": "queued"}
+async def subtitle_extract(file: UploadFile = File(...), db: Session = Depends(get_db)):
+    return queued_response(await queue_processing_job([file], "subtitle_extract", {}, db))
 
 
 @router.post("/gif/make")
-async def gif_make(
-    file: UploadFile = File(...),
-    start: float = Form(0.0),
-    duration: float = Form(5.0),
-    fps: int = Form(15),
-    scale: int = Form(480),
-    db: Session = Depends(get_db),
-):
-    """Create GIF from video"""
-    saved_path = await save_upload(file)
-    job = ProcessingJob(
-        tool_type="gif_make",
-        input_files=json.dumps([saved_path]),
-        parameters=json.dumps({"start": start, "duration": duration, "fps": fps, "scale": scale}),
-        status="pending",
-        progress=0.0,
-    )
-    db.add(job)
-    db.commit()
-    db.refresh(job)
-    return {"job_id": job.id, "status": "queued"}
+async def gif_make(file: UploadFile = File(...), start: float = Form(0.0), duration: float = Form(5.0), fps: int = Form(15), scale: int = Form(480), db: Session = Depends(get_db)):
+    return queued_response(await queue_processing_job([file], "gif_make", {"start": start, "duration": duration, "fps": fps, "scale": scale}, db))
 
 
 @router.get("/jobs")
-def list_processing_jobs(
-    status: Optional[str] = None,
-    db: Session = Depends(get_db),
-):
+def list_processing_jobs(status: Optional[str] = None, db: Session = Depends(get_db)):
     query = db.query(ProcessingJob)
     if status:
         query = query.filter_by(status=status)
-    jobs = query.order_by(ProcessingJob.id.desc()).limit(50).all()
-    return [j.to_dict() for j in jobs]
+    return [job.to_dict() for job in query.order_by(ProcessingJob.id.desc()).limit(50).all()]
 
 
 @router.get("/jobs/{job_id}")
@@ -216,26 +91,8 @@ def get_processing_job(job_id: int, db: Session = Depends(get_db)):
 
 
 @router.post("/transcribe")
-async def transcribe_media(
-    file: UploadFile = File(...),
-    model: str = Form("tiny"),
-    db: Session = Depends(get_db),
-):
-    """Transcribe audio/video to text using the optional Whisper profile."""
+async def transcribe_media(file: UploadFile = File(...), model: str = Form("tiny"), db: Session = Depends(get_db)):
     if importlib.util.find_spec("whisper") is None:
-        raise HTTPException(
-            status_code=503,
-            detail="Transcription capability unavailable. Install the optional AI profile.",
-        )
-    saved_path = await save_upload(file)
-    job = ProcessingJob(
-        tool_type="transcribe",
-        input_files=json.dumps([saved_path]),
-        parameters=json.dumps({"model": model}),
-        status="pending",
-        progress=0.0,
-    )
-    db.add(job)
-    db.commit()
-    db.refresh(job)
-    return {"job_id": job.id, "status": "queued", "model": model}
+        raise HTTPException(status_code=503, detail="Transcription capability unavailable. Install the optional AI profile.")
+    job = await queue_processing_job([file], "transcribe", {"model": model}, db)
+    return queued_response(job, model=model)
