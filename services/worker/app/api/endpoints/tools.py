@@ -1,16 +1,55 @@
 import importlib.util
 import json
+from pathlib import Path
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
+from app.config import settings
 from app.database import get_db
 from app.models.processing_job import ProcessingJob
 from app.services.uploads import cleanup_uploads, save_upload
 from app.utils.file_validator import validate_multipart_files
 
 router = APIRouter(prefix="/tools", tags=["tools"])
+
+
+def parse_paths(raw_value: Optional[str]) -> List[str]:
+    if not raw_value:
+        return []
+    try:
+        value = json.loads(raw_value)
+    except (TypeError, json.JSONDecodeError):
+        return []
+    return [str(item) for item in value] if isinstance(value, list) else []
+
+
+def serialize_processing_job(job: ProcessingJob) -> dict:
+    results = []
+    for index, stored_path in enumerate(parse_paths(job.output_files)):
+        candidate = Path(stored_path)
+        results.append({
+            "index": index,
+            "filename": candidate.name,
+            "file_size": candidate.stat().st_size if candidate.is_file() else None,
+            "download_url": f"/api/tools/jobs/{job.id}/files/{index}",
+        })
+    try:
+        parameters = json.loads(job.parameters) if job.parameters else {}
+    except json.JSONDecodeError:
+        parameters = {}
+    return {
+        "id": job.id,
+        "tool_type": job.tool_type,
+        "status": job.status,
+        "progress": job.progress,
+        "parameters": parameters,
+        "error_message": job.error_message,
+        "created_at": job.created_at.isoformat() if job.created_at else None,
+        "results": results,
+    }
 
 
 async def queue_processing_job(files: List[UploadFile], tool_type: str, parameters: dict, db: Session) -> ProcessingJob:
@@ -31,7 +70,7 @@ async def queue_processing_job(files: List[UploadFile], tool_type: str, paramete
 
 
 def queued_response(job: ProcessingJob, **extra):
-    return {"job_id": job.id, "status": "queued", **extra}
+    return {"job_id": job.id, "status": "queued", "status_url": f"/api/tools/jobs/{job.id}", **extra}
 
 
 @router.post("/convert")
@@ -79,7 +118,7 @@ def list_processing_jobs(status: Optional[str] = None, db: Session = Depends(get
     query = db.query(ProcessingJob)
     if status:
         query = query.filter_by(status=status)
-    return [job.to_dict() for job in query.order_by(ProcessingJob.id.desc()).limit(50).all()]
+    return [serialize_processing_job(job) for job in query.order_by(ProcessingJob.id.desc()).limit(50).all()]
 
 
 @router.get("/jobs/{job_id}")
@@ -87,7 +126,27 @@ def get_processing_job(job_id: int, db: Session = Depends(get_db)):
     job = db.query(ProcessingJob).filter_by(id=job_id).first()
     if not job:
         raise HTTPException(status_code=404, detail="Processing job not found")
-    return job.to_dict()
+    return serialize_processing_job(job)
+
+
+@router.get("/jobs/{job_id}/files/{file_index}")
+def get_processing_result(job_id: int, file_index: int, db: Session = Depends(get_db)):
+    job = db.query(ProcessingJob).filter_by(id=job_id).first()
+    if not job:
+        raise HTTPException(status_code=404, detail="Processing job not found")
+    paths = parse_paths(job.output_files)
+    if file_index < 0 or file_index >= len(paths):
+        raise HTTPException(status_code=404, detail="Result file not found")
+
+    root = Path(settings.processed_dir).resolve()
+    candidate = Path(paths[file_index]).resolve()
+    try:
+        candidate.relative_to(root)
+    except ValueError as error:
+        raise HTTPException(status_code=404, detail="Result file not available") from error
+    if not candidate.is_file():
+        raise HTTPException(status_code=404, detail="Result file not available")
+    return FileResponse(candidate, filename=candidate.name, media_type="application/octet-stream")
 
 
 @router.post("/transcribe")
