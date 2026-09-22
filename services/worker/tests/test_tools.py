@@ -20,7 +20,7 @@ def test_tools_convert_endpoint(tmp_path, monkeypatch):
     _accept_media(monkeypatch)
     monkeypatch.setattr(uploads.settings, "upload_dir", str(tmp_path))
     with TestClient(app) as client:
-        response = client.post("/api/tools/convert", files={"file": ("sample.mp4", io.BytesIO(b"media"), "video/mp4")}, data={"format": "mp3"})
+        response = client.post("/api/tools/convert", files={"file": ("sample.mp4", io.BytesIO(b"media"), "video/mp4")}, data={"format": "webm"})
         assert response.status_code == 200
         job_id = response.json()["job_id"]
         assert client.get(f"/api/tools/jobs/{job_id}").json()["tool_type"] == "convert"
