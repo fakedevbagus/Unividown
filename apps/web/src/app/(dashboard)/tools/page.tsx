@@ -2,7 +2,18 @@
 
 import React from 'react';
 import ToolCard from '@/components/tools/tool-card';
-import { Film, Scissors, Music, QrCode, KeyRound, Wrench } from 'lucide-react';
+import {
+  Clapperboard,
+  FileText,
+  Film,
+  Image as ImageIcon,
+  KeyRound,
+  Mic2,
+  Music,
+  QrCode,
+  Scissors,
+  Wrench,
+} from 'lucide-react';
 
 const tools = [
   {
@@ -25,6 +36,34 @@ const tools = [
     description: 'Extract and transcode audio to MP3, AAC, WAV, FLAC, and OGG formats.',
     href: '/tools/audio-converter',
     badge: 'Audio',
+  },
+  {
+    icon: ImageIcon,
+    title: 'Image Optimizer',
+    description: 'Resize and optimize supported images with configurable output quality.',
+    href: '/tools/image-optimizer',
+    badge: 'Images',
+  },
+  {
+    icon: FileText,
+    title: 'Subtitle Extractor',
+    description: 'Extract embedded subtitle tracks and download them in a portable format.',
+    href: '/tools/subtitle-extractor',
+    badge: 'Subtitles',
+  },
+  {
+    icon: Clapperboard,
+    title: 'GIF Maker',
+    description: 'Create an animated GIF from a selected segment of a video.',
+    href: '/tools/gif-maker',
+    badge: 'Animation',
+  },
+  {
+    icon: Mic2,
+    title: 'Transcription',
+    description: 'Transcribe media when the optional AI worker profile is installed.',
+    href: '/tools/transcribe',
+    badge: 'Optional AI',
   },
   {
     icon: QrCode,
