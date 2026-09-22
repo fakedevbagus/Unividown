@@ -13,9 +13,14 @@ All notable changes to Unividown are documented here.
 
 ### Phase 3A — secure media uploads
 
-- Replaced client filenames with UUID-based storage names while preserving validated extensions.
-- Streams uploads in bounded chunks and enforces `MAX_FILE_SIZE` during transfer.
-- Validates actual MIME using libmagic and rejects unsupported extensions/types.
-- Cleans partial files, failed request files, and database-failure artifacts.
-- Prevents traversal, overwrite, and same-name collisions by construction.
-- Added regression coverage and a PC-local security validation checklist.
+- Replaced client filenames with UUID-based storage names and streamed size enforcement.
+- Added extension/libmagic MIME validation, traversal/collision prevention, and failure cleanup.
+
+### Phase 3B — processing status and results
+
+- Added `status_url` to queued processing responses.
+- Removed raw input/output filesystem paths from processing API responses.
+- Added contained processing-result downloads with filename and size metadata.
+- Added restart recovery for interrupted processing jobs.
+- Cleans temporary upload inputs after processing reaches completed or failed state.
+- Added regression coverage and a PC-local validation checklist.
