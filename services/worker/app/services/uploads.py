@@ -6,6 +6,7 @@ import magic
 from fastapi import HTTPException, UploadFile
 
 from app.config import settings
+from app.services.storage import cleanup_expired_storage, ensure_storage_capacity, storage_usage_bytes
 from app.utils.file_validator import ALLOWED_EXTENSIONS, ALLOWED_TYPES
 
 CHUNK_SIZE = 1024 * 1024
@@ -26,37 +27,40 @@ def cleanup_uploads(paths: Collection[str]) -> None:
 
 
 async def save_upload(file: UploadFile, allowed_types: Collection[str] = ALLOWED_TYPES) -> str:
-    """Stream an upload into a UUID path and validate its actual MIME type."""
-    original_name = Path(file.filename or "upload").name
+    original_name = Path(file.filename or 'upload').name
     suffix = Path(original_name).suffix.lower()
     if suffix not in ALLOWED_EXTENSIONS:
-        raise HTTPException(status_code=415, detail="Unsupported file extension")
+        raise HTTPException(status_code=415, detail='Unsupported file extension')
+
+    cleanup_expired_storage()
+    declared_size = file.size if file.size is not None else 0
+    ensure_storage_capacity(declared_size)
+    baseline_usage = storage_usage_bytes()
 
     upload_root = Path(settings.upload_dir).resolve()
     upload_root.mkdir(parents=True, exist_ok=True)
     token = uuid4().hex
-    temporary = upload_root / f".{token}.part"
-    destination = upload_root / f"{token}{suffix}"
+    temporary = upload_root / f'.{token}.part'
+    destination = upload_root / f'{token}{suffix}'
     total = 0
 
     try:
-        with temporary.open("xb") as output:
+        with temporary.open('xb') as output:
             while True:
                 chunk = await file.read(CHUNK_SIZE)
                 if not chunk:
                     break
                 total += len(chunk)
                 if total > settings.max_file_size:
-                    raise HTTPException(status_code=413, detail=f"File too large. Maximum size: {settings.max_file_size} bytes")
+                    raise HTTPException(status_code=413, detail=f'File too large. Maximum size: {settings.max_file_size} bytes')
+                if settings.storage_quota_bytes > 0 and baseline_usage + total > settings.storage_quota_bytes:
+                    raise HTTPException(status_code=507, detail='Storage quota exceeded')
                 output.write(chunk)
-
         if total == 0:
-            raise HTTPException(status_code=400, detail="Uploaded file is empty")
-
+            raise HTTPException(status_code=400, detail='Uploaded file is empty')
         mime_type = detect_mime(temporary)
         if mime_type not in allowed_types:
-            raise HTTPException(status_code=415, detail=f"Unsupported file type: {mime_type}")
-
+            raise HTTPException(status_code=415, detail=f'Unsupported file type: {mime_type}')
         temporary.replace(destination)
         return str(destination)
     except Exception:
