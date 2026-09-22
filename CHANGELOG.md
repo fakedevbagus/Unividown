@@ -14,3 +14,9 @@ All notable changes to Unividown are documented here.
 - Added deterministic end-to-end fixtures for video conversion, trimming, audio extraction, image optimization, GIF creation, and subtitle extraction.
 - Added explicit optional-transcription capability validation for the core image.
 - Added one command that executes the complete Phase 3 acceptance gate.
+
+### Phase 4 — synchronized UI
+
+- Replaced the fake Settings save interaction with an explicit read-only deployment configuration view.
+- Added image optimization, subtitle extraction, GIF creation, and optional transcription to the main tool catalog.
+- Added a one-command frontend acceptance gate for the Phase 4A slice.
